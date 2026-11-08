@@ -12,7 +12,8 @@
 //   parking[]                       – { name, lat, lng, notes, fee }
 //   photos[]                        – optional { url, credit } to pin specific images;
 //                                     otherwise photos are pulled from Wikimedia Commons
-//   problems[]                      – optional { name, grade, stars?, boulder?, notes? }
+//   problems[]                      – optional { name, grade, stars?, boulder?, description?, photo? }
+//   boulders{}                      – optional { "Boulder name": { lat, lng } } matching problems[].boulder
 //                                     grade in Font notation, e.g. "f6A+"; stars 0–3
 
 export const AREAS = [
@@ -63,6 +64,12 @@ export const AREAS = [
       { name: "The Lone Arête", grade: "f5", boulder: "Lone Boulder" },
       { name: "The Lone Slab", grade: "f6B", boulder: "Lone Boulder" },
     ],
+    // Boulder positions from OpenStreetMap (© OpenStreetMap contributors, ODbL)
+    boulders: {
+      "Bullworker": { lat: 53.353167, lng: -1.639782 },
+      "Business Boulder": { lat: 53.352946, lng: -1.639617 },
+      "Crescent Arete": { lat: 53.354956, lng: -1.64094 },
+    },
   },
   {
     id: "burbage-north",
@@ -117,7 +124,7 @@ export const AREAS = [
     id: "burbage-south",
     name: "Burbage South Valley",
     region: "Peak District",
-    lat: 53.327, lng: -1.61,
+    lat: 53.3278, lng: -1.6012,
     rock: "Gritstone",
     grades: "f4 – f8A+",
     approach: "15–20 min",
@@ -160,6 +167,18 @@ export const AREAS = [
       { name: "Exposure", grade: "f5", boulder: "The Brick" },
       { name: "Wall Past Slot", grade: "f4+", boulder: "Pock Block" },
     ],
+    // Boulder positions from OpenStreetMap (© OpenStreetMap contributors, ODbL)
+    boulders: {
+      "Pock Block": { lat: 53.327603, lng: -1.602207 },
+      "The Armoured Car": { lat: 53.327517, lng: -1.60003 },
+      "The Brick": { lat: 53.327987, lng: -1.601251 },
+      "The Cobra": { lat: 53.327605, lng: -1.602412 },
+      "The Dog": { lat: 53.328302, lng: -1.601582 },
+      "The Sheep": { lat: 53.327543, lng: -1.601373 },
+      "The Tank": { lat: 53.327506, lng: -1.599934 },
+      "Useful Block": { lat: 53.328266, lng: -1.599455 },
+      "Useful Crack": { lat: 53.328266, lng: -1.599455 },
+    },
   },
   {
     id: "curbar",
@@ -208,6 +227,14 @@ export const AREAS = [
       { name: "Walk On By", grade: "f7C+", boulder: "Walk On By" },
       { name: "Side Wall Arete", grade: "f4", boulder: "Trackside" },
     ],
+    // Boulder positions from OpenStreetMap (© OpenStreetMap contributors, ODbL)
+    boulders: {
+      "Bad Landing": { lat: 53.271935, lng: -1.615795 },
+      "Ben's Wall": { lat: 53.272551, lng: -1.616653 },
+      "Gorilla Warfare": { lat: 53.2715, lng: -1.615208 },
+      "Mini Prow": { lat: 53.271761, lng: -1.615772 },
+      "Trackside": { lat: 53.27104, lng: -1.616176 },
+    },
   },
   {
     id: "froggatt",
@@ -468,37 +495,41 @@ export const AREAS = [
     ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems)
     problems: [
-      { name: "Picnic Sarcastic", grade: "f7A+" },
-      { name: "Picnic Sarcastic Sit", grade: "f7B" },
-      { name: "Power Pinch", grade: "f7B" },
-      { name: "Statstick", grade: "f7A" },
-      { name: "Inaudible Vaudeville", grade: "f7B+" },
-      { name: "Impropa Opera", grade: "f7C" },
-      { name: "Move Man", grade: "f7A+" },
-      { name: "Crack Superdirect", grade: "f7A" },
-      { name: "The Crack", grade: "f6B+" },
-      { name: "Bowderiser", grade: "f7A" },
-      { name: "Grand Opera", grade: "f7C+" },
-      { name: "The Ramp", grade: "f6B" },
-      { name: "Spring Chicken", grade: "f7C" },
-      { name: "Lateral Gruntings", grade: "f7B+" },
-      { name: "Special Cases", grade: "f8A+" },
-      { name: "The Crack Direct", grade: "f6C+" },
-      { name: "Picnic Sarcastic Direct SS", grade: "f7C" },
-      { name: "The Rib", grade: "f6C" },
-      { name: "Coming Up For Air", grade: "f7A+" },
-      { name: "Unfinished Opera", grade: "f7B+" },
-      { name: "On the Rebound", grade: "f7A+" },
-      { name: "Final Curtain", grade: "f7C+" },
-      { name: "XXXX", grade: "f8A" },
-      { name: "Frank", grade: "f7C" },
-      { name: "Lateral Gruntings Short", grade: "f7A+" },
-      { name: "Picnic Sarcastic Direct", grade: "f7B+" },
-      { name: "Ears of Perception Original", grade: "f7B+" },
-      { name: "Inaudible Vaudeville Direct", grade: "f7C" },
-      { name: "Inaudible Vaudeville LH", grade: "f7A+" },
-      { name: "Picnic Sarcastic LH SS", grade: "f7C" },
+      { name: "Picnic Sarcastic", grade: "f7A+", boulder: "The Bowderstone" },
+      { name: "Picnic Sarcastic Sit", grade: "f7B", boulder: "The Bowderstone" },
+      { name: "Power Pinch", grade: "f7B", boulder: "The Bowderstone" },
+      { name: "Statstick", grade: "f7A", boulder: "The Bowderstone" },
+      { name: "Inaudible Vaudeville", grade: "f7B+", boulder: "The Bowderstone" },
+      { name: "Impropa Opera", grade: "f7C", boulder: "The Bowderstone" },
+      { name: "Move Man", grade: "f7A+", boulder: "The Bowderstone" },
+      { name: "Crack Superdirect", grade: "f7A", boulder: "The Bowderstone" },
+      { name: "The Crack", grade: "f6B+", boulder: "The Bowderstone" },
+      { name: "Bowderiser", grade: "f7A", boulder: "The Bowderstone" },
+      { name: "Grand Opera", grade: "f7C+", boulder: "The Bowderstone" },
+      { name: "The Ramp", grade: "f6B", boulder: "The Bowderstone" },
+      { name: "Spring Chicken", grade: "f7C", boulder: "The Bowderstone" },
+      { name: "Lateral Gruntings", grade: "f7B+", boulder: "The Bowderstone" },
+      { name: "Special Cases", grade: "f8A+", boulder: "The Bowderstone" },
+      { name: "The Crack Direct", grade: "f6C+", boulder: "The Bowderstone" },
+      { name: "Picnic Sarcastic Direct SS", grade: "f7C", boulder: "The Bowderstone" },
+      { name: "The Rib", grade: "f6C", boulder: "The Bowderstone" },
+      { name: "Coming Up For Air", grade: "f7A+", boulder: "The Bowderstone" },
+      { name: "Unfinished Opera", grade: "f7B+", boulder: "The Bowderstone" },
+      { name: "On the Rebound", grade: "f7A+", boulder: "The Bowderstone" },
+      { name: "Final Curtain", grade: "f7C+", boulder: "The Bowderstone" },
+      { name: "XXXX", grade: "f8A", boulder: "The Bowderstone" },
+      { name: "Frank", grade: "f7C", boulder: "The Bowderstone" },
+      { name: "Lateral Gruntings Short", grade: "f7A+", boulder: "The Bowderstone" },
+      { name: "Picnic Sarcastic Direct", grade: "f7B+", boulder: "The Bowderstone" },
+      { name: "Ears of Perception Original", grade: "f7B+", boulder: "The Bowderstone" },
+      { name: "Inaudible Vaudeville Direct", grade: "f7C", boulder: "The Bowderstone" },
+      { name: "Inaudible Vaudeville LH", grade: "f7A+", boulder: "The Bowderstone" },
+      { name: "Picnic Sarcastic LH SS", grade: "f7C", boulder: "The Bowderstone" },
     ],
+    // Boulder positions from OpenStreetMap (© OpenStreetMap contributors, ODbL)
+    boulders: {
+      "The Bowderstone": { lat: 54.537395, lng: -3.154521 },
+    },
   },
   {
     id: "cromlech-boulders",
@@ -548,6 +579,10 @@ export const AREAS = [
       { name: "Lefthand Traverse", grade: "f7A", boulder: "Lefthand Bloc" },
       { name: "Tourist Tick", grade: "f7B+", boulder: "Jerry's Roof" },
     ],
+    // Boulder positions from OpenStreetMap (© OpenStreetMap contributors, ODbL)
+    boulders: {
+      "Jerry's Roof": { lat: 53.090618, lng: -4.052429 },
+    },
   },
   {
     id: "dumbarton",

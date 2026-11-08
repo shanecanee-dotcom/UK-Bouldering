@@ -205,16 +205,18 @@ function wireProblems(area) {
                 : "";
             lastBoulder = p.boulder;
             return heading + `
-          <li class="problem${ticks.has(id) ? " ticked" : ""}">
-            <label>
+          <li class="problem${ticks.has(id) ? " ticked" : ""}${openId === id ? " open" : ""}" data-pid="${esc(id)}">
+            <div class="problem-row">
               <input type="checkbox" data-tick="${esc(id)}" ${ticks.has(id) ? "checked" : ""} aria-label="Ticked ${esc(p.name)}" />
-              <span class="grade">${esc(p.grade)}</span>
-              <span class="pname">${esc(p.name)} ${starsHtml(p.stars)}
-                ${(sort !== "boulder" && p.boulder) || p.notes
-                  ? `<small>${esc([sort !== "boulder" && p.boulder, p.notes].filter(Boolean).join(" · "))}</small>`
-                  : ""}
-              </span>
-            </label>
+              <button type="button" class="problem-toggle" aria-expanded="${openId === id}">
+                <span class="grade">${esc(p.grade)}</span>
+                <span class="pname">${esc(p.name)} ${starsHtml(p.stars)}
+                  ${sort !== "boulder" && p.boulder ? `<small>${esc(p.boulder)}</small>` : ""}
+                </span>
+                <span class="chev" aria-hidden="true">›</span>
+              </button>
+            </div>
+            <div class="problem-detail"></div>
           </li>`;
           })
           .join("")
@@ -222,7 +224,21 @@ function wireProblems(area) {
 
     const done = area.problems.filter((p) => ticks.has(tickId(area, p))).length;
     $("#tick-count").textContent = `${done} of ${area.problems.length} ticked`;
+
+    const openLi = openId && document.querySelector(`.problem[data-pid="${CSS.escape(openId)}"]`);
+    if (openLi) fillProblemDetail(openLi, area, byId.get(openId));
   };
+
+  const byId = new Map(area.problems.map((p) => [tickId(area, p), p]));
+  let openId = null;
+
+  $("#problem-list").addEventListener("click", (e) => {
+    const toggle = e.target.closest(".problem-toggle");
+    if (!toggle) return;
+    const id = toggle.closest(".problem").dataset.pid;
+    openId = openId === id ? null : id;
+    render();
+  });
 
   $("#detail").querySelectorAll("[data-band]").forEach((chip) =>
     chip.addEventListener("click", () => {
@@ -241,6 +257,173 @@ function wireProblems(area) {
   });
 
   render();
+}
+
+// ---------- Problem detail: location, photo, notes, beta ----------
+
+// Personal photos live in IndexedDB (they're too big for localStorage); notes in localStorage.
+const photoDb = (() => {
+  let dbp;
+  const open = () =>
+    (dbp ??= new Promise((resolve, reject) => {
+      const req = indexedDB.open("ukboulders", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("photos");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }));
+  const tx = async (mode, fn) => {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const r = fn(db.transaction("photos", mode).objectStore("photos"));
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  };
+  return {
+    get: (k) => tx("readonly", (s) => s.get(k)).catch(() => null),
+    put: (k, blob) => tx("readwrite", (s) => s.put(blob, k)),
+    del: (k) => tx("readwrite", (s) => s.delete(k)).catch(() => {}),
+  };
+})();
+
+const NOTES_KEY = "ukboulders.notes";
+function loadNotes() {
+  try { return JSON.parse(localStorage.getItem(NOTES_KEY)) || {}; } catch { return {}; }
+}
+function saveNote(id, text) {
+  const notes = loadNotes();
+  if (text.trim()) notes[id] = text; else delete notes[id];
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); } catch {}
+}
+
+// Shrink phone photos to ~1400px JPEG before storing
+async function shrinkImage(file, max = 1400) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bmp.width * scale);
+  canvas.height = Math.round(bmp.height * scale);
+  canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  return new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.82));
+}
+
+const walkingUrl = (lat, lng) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`;
+
+let objectUrl = null;
+
+async function fillProblemDetail(li, area, p) {
+  const id = tickId(area, p);
+  const spot = p.boulder && area.boulders?.[p.boulder];
+  const q = encodeURIComponent(`${p.name} ${area.name} boulder ${p.grade.replace(/^f/, "")}`);
+  const note = loadNotes()[id] || "";
+
+  li.querySelector(".problem-detail").innerHTML = `
+    <div class="pd-section">
+      <h5>Location</h5>
+      ${spot
+        ? `<p>${esc(p.boulder)}</p>
+           <div class="parking-actions">
+             <button type="button" data-act="map">Show on map</button>
+             <a href="${walkingUrl(spot.lat, spot.lng)}" target="_blank" rel="noopener">Walking directions</a>
+           </div>`
+        : `<p class="muted">${p.boulder ? `${esc(p.boulder)} – exact` : "Exact"} boulder position isn't mapped yet, so this points to the crag.</p>
+           <div class="parking-actions">
+             <button type="button" data-act="map">Show crag on map</button>
+             <a href="${walkingUrl(area.lat, area.lng)}" target="_blank" rel="noopener">Walking directions</a>
+           </div>`}
+    </div>
+
+    <div class="pd-section">
+      <h5>Photo</h5>
+      <div class="pd-photo"></div>
+      <label class="file-btn">
+        <input type="file" accept="image/*" capture="environment" data-act="photo" hidden />
+        <span>Add your photo</span>
+      </label>
+      <button type="button" class="link-btn" data-act="rmphoto" hidden>Remove photo</button>
+    </div>
+
+    <div class="pd-section">
+      <h5>What it's like</h5>
+      ${p.description ? `<p>${esc(p.description)}</p>` : ""}
+      <textarea data-act="note" rows="3" placeholder="Your notes: style, beta, conditions, landing…">${esc(note)}</textarea>
+      <div class="parking-actions">
+        <a href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener">Watch beta videos</a>
+        <a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">Search the web</a>
+      </div>
+    </div>`;
+
+  const panel = li.querySelector(".problem-detail");
+
+  // Photo: data file photo first, then the user's own
+  const showPhoto = async () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl), (objectUrl = null);
+    const box = panel.querySelector(".pd-photo");
+    const mine = await photoDb.get(id);
+    panel.querySelector('[data-act="rmphoto"]').hidden = !mine;
+    panel.querySelector(".file-btn span").textContent = mine ? "Replace your photo" : "Add your photo";
+    if (mine) {
+      objectUrl = URL.createObjectURL(mine);
+      box.innerHTML = `<img src="${objectUrl}" alt="Your photo of ${esc(p.name)}" /><p class="muted">Your photo (saved on this device only)</p>`;
+    } else if (p.photo) {
+      box.innerHTML = `<img src="${esc(p.photo.url)}" alt="${esc(p.name)}" loading="lazy" />${p.photo.credit ? `<p class="muted">${esc(p.photo.credit)}</p>` : ""}`;
+    } else {
+      box.innerHTML = `<p class="muted">No photo yet. Add one next time you're there.</p>`;
+    }
+  };
+  showPhoto();
+
+  panel.querySelector('[data-act="map"]').addEventListener("click", () => {
+    if (spot) focusBoulder(p.boulder);
+    else map.flyTo([area.lat, area.lng], 16);
+    if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth" });
+  });
+  panel.querySelector('[data-act="photo"]').addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      await photoDb.put(id, await shrinkImage(file));
+    } catch {
+      alert("Couldn't save the photo on this device.");
+    }
+    showPhoto();
+  });
+  panel.querySelector('[data-act="rmphoto"]').addEventListener("click", async () => {
+    await photoDb.del(id);
+    showPhoto();
+  });
+  let t;
+  panel.querySelector('[data-act="note"]').addEventListener("input", (e) => {
+    clearTimeout(t);
+    t = setTimeout(() => saveNote(id, e.target.value), 300);
+  });
+}
+
+// ---------- Boulder markers ----------
+const boulderLayer = L.layerGroup().addTo(map);
+const boulderMarkers = new Map();
+
+function showBoulders(area) {
+  boulderLayer.clearLayers();
+  boulderMarkers.clear();
+  for (const [name, b] of Object.entries(area.boulders || {})) {
+    const count = (area.problems || []).filter((p) => p.boulder === name).length;
+    const m = L.circleMarker([b.lat, b.lng], {
+      radius: 7, weight: 2, color: "#fff", fillColor: "#d1582c", fillOpacity: 0.9,
+    })
+      .bindTooltip(name)
+      .bindPopup(`<strong>${esc(name)}</strong><br>${count} problem${count === 1 ? "" : "s"} listed<br><a href="${walkingUrl(b.lat, b.lng)}" target="_blank" rel="noopener">Walking directions</a>`)
+      .addTo(boulderLayer);
+    boulderMarkers.set(name, m);
+  }
+}
+
+function focusBoulder(name) {
+  const m = boulderMarkers.get(name);
+  if (!m) return;
+  map.flyTo(m.getLatLng(), 17);
+  map.once("moveend", () => m.openPopup());
 }
 
 // ---------- Detail view ----------
@@ -311,6 +494,8 @@ async function showDetail(id) {
     })
   );
 
+  showBoulders(area);
+
   // Parking markers for this area
   parkingLayer.clearLayers();
   for (const p of area.parking) {
@@ -342,6 +527,7 @@ function showList() {
   if (activeId) markers.get(activeId).setIcon(cragIcon());
   activeId = null;
   parkingLayer.clearLayers();
+  boulderLayer.clearLayers();
   $("#detail-view").hidden = true;
   $("#list-view").hidden = false;
   history.replaceState(null, "", location.pathname);

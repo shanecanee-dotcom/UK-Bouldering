@@ -38,8 +38,21 @@ All data lives in [`data/areas.js`](data/areas.js). Add an object to `AREAS`:
   ],
   // optional – otherwise photos come from Wikimedia Commons
   photos: [{ url: "images/my-crag-1.jpg", credit: "Your name" }],
+  // optional problem list; boulder links to the boulders map below
+  problems: [
+    {
+      name: "The Arete", grade: "f6A", stars: 2, boulder: "Big Block",
+      description: "Balancy arête with a good landing.",          // optional
+      photo: { url: "images/the-arete.jpg", credit: "Your name" }, // optional
+    },
+  ],
+  // optional boulder positions, keyed by the problems' boulder name
+  boulders: { "Big Block": { lat: 53.0, lng: -1.6 } },
 }
 ```
+
+Ticks, personal notes and personal photos added in the app are stored only in that browser (localStorage / IndexedDB).
+To publish a photo or description for everyone, add `photo` / `description` to the problem in `data/areas.js`.
 
 Coordinates and parking details are approximate. Check the
 [BMC Regional Access Database](https://www.thebmc.co.uk/rad) for up-to-date access info.

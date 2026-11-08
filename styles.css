@@ -24,6 +24,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -232,8 +233,61 @@ body {
   border-top: 1px solid var(--border);
 }
 .boulder-heading:first-child { border-top: none; border-radius: 8px 8px 0 0; }
-.problem label { display: flex; align-items: baseline; gap: 10px; padding: 8px 10px; cursor: pointer; }
-.problem input { accent-color: var(--accent); transform: translateY(2px); }
+.problem-row { display: flex; align-items: center; gap: 4px; padding-left: 10px; }
+.problem-row input { accent-color: var(--accent); width: 18px; height: 18px; flex: none; margin: 0; }
+.problem-toggle {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 10px 9px 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.chev { color: var(--muted); transition: transform .15s; font-size: 18px; line-height: 1; }
+.problem.open .chev { transform: rotate(90deg); }
+.problem-detail { display: none; padding: 4px 12px 12px 38px; }
+.problem.open .problem-detail { display: block; }
+.problem.open { background: var(--bg); }
+.pd-section { margin-top: 10px; }
+.pd-section h5 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.pd-section p { margin: 0 0 6px; font-size: 14px; }
+.pd-section .muted, .muted { color: var(--muted); font-size: 13px; }
+.pd-photo img { width: 100%; max-height: 320px; object-fit: cover; border-radius: 6px; display: block; margin-bottom: 4px; }
+.pd-section textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+  margin-bottom: 6px;
+}
+.file-btn span, .link-btn {
+  display: inline-block;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+}
+.link-btn { margin-left: 6px; color: var(--muted); }
 .problem .grade {
   flex: 0 0 44px;
   font-weight: 600;
