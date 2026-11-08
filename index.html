@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UK Boulders</title>
+  <meta name="description" content="Outdoor bouldering areas across the UK, with photos and nearby parking." />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>UK Boulders</h1>
+    <p class="tagline">Outdoor bouldering areas, photos &amp; parking</p>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <!-- List view -->
+      <section id="list-view">
+        <div class="filters">
+          <input id="search" type="search" placeholder="Search crags…" aria-label="Search crags" />
+          <select id="region" aria-label="Filter by region">
+            <option value="">All regions</option>
+          </select>
+        </div>
+        <p id="count" class="count"></p>
+        <ul id="area-list" class="area-list"></ul>
+      </section>
+
+      <!-- Detail view -->
+      <section id="detail-view" hidden>
+        <button id="back" class="back" type="button">← All areas</button>
+        <div id="detail"></div>
+      </section>
+    </aside>
+
+    <div id="map" class="map" role="region" aria-label="Map of bouldering areas"></div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
