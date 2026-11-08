@@ -86,8 +86,9 @@ body {
   color: var(--text);
   min-width: 0;
 }
-.filters input { flex: 1 1 120px; }
-.filters select { flex: 0 1 auto; max-width: 50%; }
+.filters { flex-wrap: wrap; }
+.filters input { flex: 1 1 100%; }
+.filters select { flex: 1 1 0; }
 
 .count { margin: 10px 16px 0; color: var(--muted); font-size: 13px; }
 
@@ -188,6 +189,62 @@ body {
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* Conditions */
+:root { --dry: #2f7d4f; --damp: #b7791f; --wet: #b5443a; }
+@media (prefers-color-scheme: dark) { :root { --dry: #6fbf95; --damp: #e0a948; --wet: #e2776c; } }
+
+.tag.cond { background: transparent; border: 1px solid currentColor; }
+.cond-dry { color: var(--dry); }
+.cond-damp { color: var(--damp); }
+.cond-wet { color: var(--wet); }
+
+.cond-now {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: var(--surface);
+}
+.cond-now strong { font-size: 17px; }
+.cond-now span { font-size: 13px; color: var(--muted); }
+.cond-stats, .cond-best { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.cond-stats strong, .cond-best strong { color: var(--text); }
+.cond-warn {
+  margin: 8px 0 0;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border-left: 3px solid var(--wet);
+}
+.outlook {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin: 10px 0 6px;
+}
+.day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  text-align: center;
+}
+.day.best { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
+.d-name { color: var(--text); font-weight: 600; }
+.d-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.d-label { font-weight: 600; }
+.d-temp { color: var(--text); }
+.d-rain { color: var(--muted); font-size: 10px; line-height: 1.2; }
 
 /* Problems */
 .count-inline { font-weight: normal; color: var(--muted); }

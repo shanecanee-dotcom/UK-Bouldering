@@ -5,6 +5,7 @@ A lightweight web app listing outdoor bouldering areas in the UK, with photos an
 - **List + map**: search and filter areas by region, see them all on an OpenStreetMap map.
 - **Area detail**: rock type, grade range, approach time and a short description.
 - **Parking**: each area lists one or more parking spots with fees, notes, a "Directions" link and a map marker.
+- **Conditions**: a "likely dry / may be damp / wet" estimate for each crag, the rain over the last 48 hours, a friction hint and a 7-day outlook with the best day, from [Open-Meteo](https://open-meteo.com) (no API key needed). Sandstone crags use a stricter rule. The logic is in [`conditions.js`](conditions.js).
 - **Photos**: pulled live from [Wikimedia Commons](https://commons.wikimedia.org) (freely licensed, geotagged near each crag) with credits. You can pin your own photos per area with the `photos` field.
 
 No build step: plain HTML, CSS and JavaScript, with [Leaflet](https://leafletjs.com) loaded from a CDN.

@@ -1,4 +1,5 @@
 import { AREAS } from "./data/areas.js";
+import { loadWeather, nowIndex, assess, outlook, bestDay } from "./conditions.js";
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) =>
@@ -78,6 +79,23 @@ function stripTags(html) {
 const regions = [...new Set(AREAS.map((a) => a.region))].sort();
 $("#region").insertAdjacentHTML("beforeend", regions.map((r) => `<option>${esc(r)}</option>`).join(""));
 
+// ---------- Weather ----------
+let weather = null; // Map(areaId → Open-Meteo response)
+const weatherReady = loadWeather(AREAS)
+  .then((m) => (weather = m))
+  .catch(() => null)
+  .then((m) => {
+    renderList();
+    if (activeId) renderConditions(AREAS.find((a) => a.id === activeId));
+    return m;
+  });
+
+const condNow = (a) => {
+  const w = weather?.get(a.id);
+  return w ? assess(a, w, nowIndex(w)) : null;
+};
+const LEVEL_RANK = { dry: 0, damp: 1, wet: 2 };
+
 function renderList() {
   const q = $("#search").value.trim().toLowerCase();
   const region = $("#region").value;
@@ -86,6 +104,14 @@ function renderList() {
       (!region || a.region === region) &&
       (!q || [a.name, a.region, a.rock, a.description].join(" ").toLowerCase().includes(q))
   );
+  if ($("#list-sort").value === "driest" && weather) {
+    shown.sort((a, b) => {
+      const ca = condNow(a), cb = condNow(b);
+      return LEVEL_RANK[ca.level] - LEVEL_RANK[cb.level] || ca.score - cb.score;
+    });
+  } else {
+    shown.sort((a, b) => a.name.localeCompare(b.name));
+  }
 
   $("#count").textContent = `${shown.length} area${shown.length === 1 ? "" : "s"}`;
   $("#area-list").innerHTML = shown
@@ -101,6 +127,7 @@ function renderList() {
               <span class="tag">${esc(a.grades)}</span>
               <span class="tag parking">P ${a.parking.length} parking</span>
               ${a.problems?.length ? `<span class="tag">${a.problems.length} problems</span>` : ""}
+              ${(() => { const c = condNow(a); return c ? `<span class="tag cond cond-${c.level}">${esc(c.label)}</span>` : ""; })()}
             </div>
           </div>
         </button>
@@ -121,6 +148,7 @@ function renderList() {
 
 $("#search").addEventListener("input", renderList);
 $("#region").addEventListener("change", renderList);
+$("#list-sort").addEventListener("change", renderList);
 $("#area-list").addEventListener("click", (e) => {
   const card = e.target.closest(".card");
   if (card) showDetail(card.dataset.id);
@@ -426,6 +454,54 @@ function focusBoulder(name) {
   map.once("moveend", () => m.openPopup());
 }
 
+// ---------- Conditions panel ----------
+const dayName = (d) => new Date(`${d.date}T12:00`).toLocaleDateString("en-GB", { weekday: "short" });
+
+function renderConditions(area) {
+  const box = document.getElementById("conditions");
+  if (!box) return;
+  const w = weather?.get(area.id);
+  if (!w) {
+    box.innerHTML = `<p class="gallery-note">Couldn't load the weather right now. Try again later.</p>`;
+    return;
+  }
+  const now = assess(area, w, nowIndex(w));
+  const days = outlook(area, w);
+  const best = bestDay(days);
+
+  box.innerHTML = `
+    <div class="cond-now cond-${now.level}">
+      <strong>${esc(now.label)}</strong>
+      <span>${now.friction}</span>
+    </div>
+    <p class="cond-stats">
+      Rain last 48h: <strong>${now.rain48.toFixed(1)} mm</strong> ·
+      ${Math.round(now.temp)}°C · ${now.hum}% humidity · wind ${Math.round(now.wind)} km/h
+    </p>
+    ${now.fragile ? `<p class="cond-warn">Sandstone is weak when wet: holds snap and wear away. Give it at least a full dry day after rain.</p>` : ""}
+    ${best ? `<p class="cond-best">Best day this week: <strong>${best.isToday ? "Today" : dayName(best)}</strong> (${esc(best.label.toLowerCase())}, ${Math.round(best.tempMax)}°C)</p>` : ""}
+    <div class="outlook" role="list">
+      ${days
+        .map(
+          (d) => `
+        <div class="day cond-${d.level}${d === best ? " best" : ""}" role="listitem"
+             title="${esc(d.label)} · ${d.friction} · sunrise ${d.sunrise}, sunset ${d.sunset}">
+          <span class="d-name">${d.isToday ? "Today" : dayName(d)}</span>
+          <span class="d-dot" aria-hidden="true"></span>
+          <span class="d-label">${esc(d.level === "dry" ? "Dry" : d.level === "damp" ? "Damp" : "Wet")}</span>
+          <span class="d-temp">${Math.round(d.tempMax)}°</span>
+          <span class="d-rain">${d.rainDay.toFixed(1)} mm · ${d.rainChance ?? 0}%</span>
+        </div>`
+        )
+        .join("")}
+    </div>
+    <p class="gallery-note">
+      An estimate from recent rain, humidity and wind, not a reading of the rock. Shaded and woodland boulders
+      can stay damp for longer. Today's daylight: ${days[0]?.sunrise ?? "–"}–${days[0]?.sunset ?? "–"}.
+      Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.
+    </p>`;
+}
+
 // ---------- Detail view ----------
 let activeId = null;
 
@@ -455,6 +531,9 @@ async function showDetail(id) {
       <div class="fact"><span>Approach</span><strong>${esc(area.approach)}</strong></div>
     </div>
     <p>${esc(area.description)}</p>
+
+    <h3>Conditions</h3>
+    <div id="conditions" class="conditions"><p class="gallery-note">Loading conditions…</p></div>
 
     ${problemsSection(area)}
 
@@ -486,6 +565,7 @@ async function showDetail(id) {
     </p>`;
 
   if (area.problems?.length) wireProblems(area);
+  weatherReady.then(() => { if (activeId === id) renderConditions(area); });
 
   $("#detail").querySelectorAll("[data-zoom]").forEach((btn) =>
     btn.addEventListener("click", () => {
