@@ -188,6 +188,63 @@ body {
   text-decoration: underline;
 }
 
+/* Problems */
+.count-inline { font-weight: normal; color: var(--muted); }
+.problem-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+#problem-sort {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.problem-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.problem + .problem { border-top: 1px solid var(--border); }
+.boulder-heading {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+.boulder-heading:first-child { border-top: none; border-radius: 8px 8px 0 0; }
+.problem label { display: flex; align-items: baseline; gap: 10px; padding: 8px 10px; cursor: pointer; }
+.problem input { accent-color: var(--accent); transform: translateY(2px); }
+.problem .grade {
+  flex: 0 0 44px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.problem .pname { flex: 1; }
+.problem small { display: block; color: var(--muted); font-size: 12px; }
+.problem.ticked .pname { color: var(--muted); text-decoration: line-through; }
+.stars { color: #c9932b; font-size: 12px; letter-spacing: 1px; margin-left: 2px; }
+
 .disclaimer { font-size: 12px; color: var(--muted); margin-top: 16px; }
 
 /* Map markers */

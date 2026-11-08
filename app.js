@@ -100,6 +100,7 @@ function renderList() {
             <div class="tags">
               <span class="tag">${esc(a.grades)}</span>
               <span class="tag parking">P ${a.parking.length} parking</span>
+              ${a.problems?.length ? `<span class="tag">${a.problems.length} problems</span>` : ""}
             </div>
           </div>
         </button>
@@ -124,6 +125,123 @@ $("#area-list").addEventListener("click", (e) => {
   const card = e.target.closest(".card");
   if (card) showDetail(card.dataset.id);
 });
+
+// ---------- Problems ----------
+// Font grade → sortable number: "f6B+" → 6.25, "f5+" → 5.5
+function gradeValue(grade) {
+  const m = /^f?(\d)([ABC])?(\+)?$/i.exec(grade.trim());
+  if (!m) return 99;
+  const [, n, letter, plus] = m;
+  if (!letter) return +n + (plus ? 0.5 : 0);
+  return +n + ("ABC".indexOf(letter.toUpperCase()) * 2 + (plus ? 1 : 0)) / 8;
+}
+
+const BANDS = [
+  { id: "all", label: "All", test: () => true },
+  { id: "3-5", label: "f3–f5+", test: (v) => v < 6 },
+  { id: "6", label: "f6", test: (v) => v >= 6 && v < 7 },
+  { id: "7", label: "f7", test: (v) => v >= 7 && v < 8 },
+  { id: "8", label: "f8+", test: (v) => v >= 8 },
+];
+
+const TICKS_KEY = "ukboulders.ticks";
+function loadTicks() {
+  try { return new Set(JSON.parse(localStorage.getItem(TICKS_KEY)) || []); } catch { return new Set(); }
+}
+function saveTicks(ticks) {
+  try { localStorage.setItem(TICKS_KEY, JSON.stringify([...ticks])); } catch {}
+}
+// Names repeat within a crag (e.g. several "Arete"s at Hound Tor), so include boulder + grade
+const tickId = (area, p) => [area.id, p.boulder || "", p.name, p.grade].join("/");
+const starsHtml = (n = 0) => (n ? `<span class="stars" aria-label="${n} star${n > 1 ? "s" : ""}">${"★".repeat(n)}</span>` : "");
+
+function problemsSection(area) {
+  if (!area.problems?.length)
+    return `<h3>Problems</h3><p class="gallery-note">No problem list for this area yet.</p>`;
+  const hasBoulders = area.problems.some((p) => p.boulder);
+  return `
+    <h3>Problems <span class="count-inline">(${area.problems.length})</span></h3>
+    <div class="problem-controls">
+      <div class="chips" role="group" aria-label="Filter by grade">
+        ${BANDS.map((b) => `<button type="button" class="chip${b.id === "all" ? " on" : ""}" data-band="${b.id}">${b.label}</button>`).join("")}
+      </div>
+      <select id="problem-sort" aria-label="Sort problems">
+        <option value="grade">Sort: grade</option>
+        ${hasBoulders ? `<option value="boulder">Sort: boulder</option>` : ""}
+        ${area.problems.some((p) => p.stars) ? `<option value="stars">Sort: stars</option>` : ""}
+        <option value="name">Sort: name</option>
+      </select>
+    </div>
+    <p id="tick-count" class="gallery-note"></p>
+    <ul id="problem-list" class="problem-list"></ul>
+    <p class="gallery-note">A selection of problems, not a full guide. Grades are a consensus and can change.</p>`;
+}
+
+function wireProblems(area) {
+  let band = "all";
+  const ticks = loadTicks();
+
+  const render = () => {
+    const sort = $("#problem-sort").value;
+    const test = BANDS.find((b) => b.id === band).test;
+    const list = area.problems
+      .filter((p) => test(gradeValue(p.grade)))
+      .sort((a, b) =>
+        sort === "name" ? a.name.localeCompare(b.name)
+        : sort === "boulder"
+          ? !a.boulder - !b.boulder || (a.boulder || "").localeCompare(b.boulder || "") || gradeValue(a.grade) - gradeValue(b.grade)
+        : sort === "stars" ? (b.stars || 0) - (a.stars || 0) || gradeValue(a.grade) - gradeValue(b.grade)
+        : gradeValue(a.grade) - gradeValue(b.grade) || a.name.localeCompare(b.name)
+      );
+
+    let lastBoulder = null;
+    $("#problem-list").innerHTML = list.length
+      ? list
+          .map((p) => {
+            const id = tickId(area, p);
+            const heading =
+              sort === "boulder" && p.boulder !== lastBoulder
+                ? `<li class="boulder-heading">${esc(p.boulder || "Other")}</li>`
+                : "";
+            lastBoulder = p.boulder;
+            return heading + `
+          <li class="problem${ticks.has(id) ? " ticked" : ""}">
+            <label>
+              <input type="checkbox" data-tick="${esc(id)}" ${ticks.has(id) ? "checked" : ""} aria-label="Ticked ${esc(p.name)}" />
+              <span class="grade">${esc(p.grade)}</span>
+              <span class="pname">${esc(p.name)} ${starsHtml(p.stars)}
+                ${(sort !== "boulder" && p.boulder) || p.notes
+                  ? `<small>${esc([sort !== "boulder" && p.boulder, p.notes].filter(Boolean).join(" · "))}</small>`
+                  : ""}
+              </span>
+            </label>
+          </li>`;
+          })
+          .join("")
+      : `<li class="gallery-note">No problems in this grade band yet.</li>`;
+
+    const done = area.problems.filter((p) => ticks.has(tickId(area, p))).length;
+    $("#tick-count").textContent = `${done} of ${area.problems.length} ticked`;
+  };
+
+  $("#detail").querySelectorAll("[data-band]").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      band = chip.dataset.band;
+      $("#detail").querySelectorAll("[data-band]").forEach((c) => c.classList.toggle("on", c === chip));
+      render();
+    })
+  );
+  $("#problem-sort").addEventListener("change", render);
+  $("#problem-list").addEventListener("change", (e) => {
+    const id = e.target.dataset.tick;
+    if (!id) return;
+    e.target.checked ? ticks.add(id) : ticks.delete(id);
+    saveTicks(ticks);
+    render();
+  });
+
+  render();
+}
 
 // ---------- Detail view ----------
 let activeId = null;
@@ -155,6 +273,8 @@ async function showDetail(id) {
     </div>
     <p>${esc(area.description)}</p>
 
+    ${problemsSection(area)}
+
     <h3>Parking</h3>
     <ul class="parking-list">
       ${area.parking
@@ -181,6 +301,8 @@ async function showDetail(id) {
       <a href="https://www.thebmc.co.uk/rad" target="_blank" rel="noopener">BMC Regional Access Database</a>
       before visiting, park considerately and never block gates.
     </p>`;
+
+  if (area.problems?.length) wireProblems(area);
 
   $("#detail").querySelectorAll("[data-zoom]").forEach((btn) =>
     btn.addEventListener("click", () => {
