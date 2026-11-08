@@ -21,14 +21,14 @@ export const AREAS = [
     id: "stanage-plantation",
     name: "Stanage Plantation",
     region: "Peak District",
-    lat: 53.354, lng: -1.6385,
+    lat: 53.3537, lng: -1.6401,
     rock: "Gritstone",
     grades: "f3 – f8A",
     approach: "15 min",
     description:
       "Dense cluster of classic grit blocks below the edge, including the Pebble and the Grand Hotel. Superb landings and a huge spread of grades.",
     parking: [
-      { name: "Hollin Bank car park", lat: 53.3504, lng: -1.645, notes: "Main car park for the Plantation, ~10 min walk up through the wood. Busy at weekends.", fee: "Pay & display" },
+      { name: "Hollin Bank car park", lat: 53.3504, lng: -1.645, notes: "Main car park for the Plantation; walk up through the wood. Busy at weekends.", fee: "Pay & display" },
       { name: "Roadside parking, Dennis Knoll", lat: 53.3548, lng: -1.6515, notes: "Free roadside spaces further west; don't block gates or passing places.", fee: "Free" },
     ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems)
@@ -184,7 +184,7 @@ export const AREAS = [
     id: "curbar",
     name: "Curbar Edge",
     region: "Peak District",
-    lat: 53.2751, lng: -1.6173,
+    lat: 53.2718, lng: -1.6159,
     rock: "Gritstone",
     grades: "f4 – f8A",
     approach: "10 min",
@@ -382,7 +382,7 @@ export const AREAS = [
     description:
       "Woodland gritstone boulders on the Chevin above the A660, with around 200 problems from easy slabs to some of Yorkshire's hardest test-pieces.",
     parking: [
-      { name: "Car park off Pool Road (East Chevin)", lat: 53.9043, lng: -1.6427, notes: "Mapped car park ~1 km from the crags. There's also limited roadside parking on the A660 below the crag.", fee: "Free" },
+      { name: "Chevin Forest Park – Upper Shawfield car park", lat: 53.89333, lng: -1.67025, notes: "Free Chevin Forest Park car park; walk east along the Dales Way Link. There's also limited roadside parking on the A660 below the crag (not on the map).", fee: "Free" },
     ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems); stars from UKClimbing ticklists; f7B+ and harder from climbing-history.org
     problems: [
@@ -535,7 +535,7 @@ export const AREAS = [
     id: "cromlech-boulders",
     name: "Cromlech Boulders",
     region: "North Wales",
-    lat: 53.0935, lng: -4.0485,
+    lat: 53.0906, lng: -4.0522,
     rock: "Rhyolite",
     grades: "f4 – f8A+",
     approach: "1 min",
@@ -595,7 +595,7 @@ export const AREAS = [
     description:
       "Glasgow's urban bouldering venue with some of Scotland's hardest problems on polished basalt.",
     parking: [
-      { name: "Woodyard Road parking", lat: 55.9392, lng: -4.5698, notes: "Short walk to the rock along the river.", fee: "Free" },
+      { name: "Car park north of the rock", lat: 55.94218, lng: -4.56619, notes: "Nearest mapped public car park on the same side of the River Leven. Some climbers park closer on Castle Road.", fee: "Free" },
     ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems); Pongo SDS from published history
     problems: [

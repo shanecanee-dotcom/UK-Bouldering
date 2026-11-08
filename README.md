@@ -6,6 +6,7 @@ A lightweight web app listing outdoor bouldering areas in the UK, with photos an
 - **Area detail**: rock type, grade range, approach time and a short description.
 - **Parking**: each area lists one or more parking spots with fees, notes, a "Directions" link and a map marker.
 - **Conditions**: a "likely dry / may be damp / wet" estimate for each crag, the rain over the last 48 hours, a friction hint and a 7-day outlook with the best day, from [Open-Meteo](https://open-meteo.com) (no API key needed). Sandstone crags use a stricter rule. The logic is in [`conditions.js`](conditions.js).
+- **Walk-ins**: the walking route from each car park to the crag drawn on the map, with distance, ascent, an estimated time and the nearest postcode for sat-navs. The routes are precomputed into [`data/walkins.js`](data/walkins.js).
 - **Photos**: pulled live from [Wikimedia Commons](https://commons.wikimedia.org) (freely licensed, geotagged near each crag) with credits. You can pin your own photos per area with the `photos` field.
 
 No build step: plain HTML, CSS and JavaScript, with [Leaflet](https://leafletjs.com) loaded from a CDN.
@@ -54,6 +55,14 @@ All data lives in [`data/areas.js`](data/areas.js). Add an object to `AREAS`:
 
 Ticks, personal notes and personal photos added in the app are stored only in that browser (localStorage / IndexedDB).
 To publish a photo or description for everyone, add `photo` / `description` to the problem in `data/areas.js`.
+
+After adding a crag or changing crag/parking coordinates, regenerate the walk-ins (takes a minute or two; it calls free public APIs politely):
+
+```bash
+python3 tools/build_walkins.py
+```
+
+It uses OSRM walking routes over OpenStreetMap paths, Open-Meteo elevation and postcodes.io. A route that's wildly longer than the straight-line distance is dropped and shown as "no walking route mapped".
 
 Coordinates and parking details are approximate. Check the
 [BMC Regional Access Database](https://www.thebmc.co.uk/rad) for up-to-date access info.

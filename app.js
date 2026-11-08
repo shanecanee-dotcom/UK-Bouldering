@@ -1,19 +1,30 @@
 import { AREAS } from "./data/areas.js";
 import { loadWeather, nowIndex, assess, outlook, bestDay } from "./conditions.js";
+import { WALKINS } from "./data/walkins.js";
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ---------- Map ----------
-const map = L.map("map", { zoomControl: true }).setView([54.3, -2.5], 6);
+// Fractional zoom so the whole UK fits short (phone) maps without dropping to a Europe-wide view
+const map = L.map("map", { zoomControl: true, zoomSnap: 0.25 }).setView([54.3, -2.5], 6);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 18,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
 
-const cragIcon = (active = false) =>
-  L.divIcon({ className: "", html: `<div class="pin${active ? " active" : ""}"></div>`, iconSize: [26, 26], iconAnchor: [13, 26] });
+// Crag pins are coloured by today's conditions once the weather has loaded
+const cragIcon = (level = "unknown", active = false) => {
+  const s = active ? 30 : 24;
+  return L.divIcon({
+    className: "",
+    html: `<div class="pin ${level}${active ? " active" : ""}"></div>`,
+    iconSize: [s, s],
+    iconAnchor: [s / 2, s],
+    tooltipAnchor: [0, -s],
+  });
+};
 const parkingIcon = L.divIcon({ className: "", html: '<div class="p-pin">P</div>', iconSize: [22, 22], iconAnchor: [11, 11] });
 
 const markers = new Map();
@@ -22,10 +33,22 @@ const parkingLayer = L.layerGroup().addTo(map);
 for (const area of AREAS) {
   const m = L.marker([area.lat, area.lng], { icon: cragIcon(), title: area.name })
     .addTo(map)
-    .bindTooltip(area.name)
+    .bindTooltip(area.name, { direction: "top" })
     .on("click", () => showDetail(area.id));
   markers.set(area.id, m);
 }
+
+function updateMarkers() {
+  for (const a of AREAS) markers.get(a.id).setIcon(cragIcon(condNow(a)?.level, a.id === activeId));
+}
+
+const legend = L.control({ position: "bottomleft" });
+legend.onAdd = () => {
+  const div = L.DomUtil.create("div", "legend");
+  div.innerHTML = `<span class="cond-dry"><i></i>Dry</span><span class="cond-damp"><i></i>Damp</span><span class="cond-wet"><i></i>Wet</span>`;
+  div.title = "Today's estimated conditions";
+  return div;
+};
 
 // ---------- Photos (Wikimedia Commons geosearch) ----------
 const photoCache = new Map();
@@ -86,6 +109,10 @@ const weatherReady = loadWeather(AREAS)
   .catch(() => null)
   .then((m) => {
     renderList();
+    if (m) {
+      updateMarkers();
+      legend.addTo(map);
+    }
     if (activeId) renderConditions(AREAS.find((a) => a.id === activeId));
     return m;
   });
@@ -116,22 +143,28 @@ function renderList() {
   $("#count").textContent = `${shown.length} area${shown.length === 1 ? "" : "s"}`;
   $("#area-list").innerHTML = shown
     .map(
-      (a) => `
+      (a) => {
+        const c = condNow(a);
+        const walk = walkFor(a, bestWalkIndex(a));
+        return `
       <li>
         <button class="card" data-id="${a.id}" type="button">
           <div class="thumb" data-thumb="${a.id}"></div>
-          <div>
-            <h3>${esc(a.name)}</h3>
-            <p class="meta">${esc(a.region)} · ${esc(a.rock)}</p>
-            <div class="tags">
-              <span class="tag">${esc(a.grades)}</span>
-              <span class="tag parking">P ${a.parking.length} parking</span>
-              ${a.problems?.length ? `<span class="tag">${a.problems.length} problems</span>` : ""}
-              ${(() => { const c = condNow(a); return c ? `<span class="tag cond cond-${c.level}">${esc(c.label)}</span>` : ""; })()}
+          <div class="card-body">
+            <div class="card-top">
+              <h3>${esc(a.name)}</h3>
+              ${c ? `<span class="pill cond-${c.level}" title="${esc(c.label)}"><i></i>${esc(shortLabel(c))}</span>` : ""}
             </div>
+            <p class="meta">${esc(a.region)} · ${esc(a.rock)}</p>
+            <p class="card-stats">
+              <span>${esc(a.grades.replace(/\s/g, ""))}</span>
+              ${a.problems?.length ? `<span>${a.problems.length} problems</span>` : ""}
+              ${walk?.path ? `<span>${walk.minutes} min walk</span>` : ""}
+            </p>
           </div>
         </button>
-      </li>`
+      </li>`;
+      }
     )
     .join("");
 
@@ -153,6 +186,25 @@ $("#area-list").addEventListener("click", (e) => {
   const card = e.target.closest(".card");
   if (card) showDetail(card.dataset.id);
 });
+
+// Hovering a card highlights its pin on the map
+const hoverPin = (id, on) => {
+  const m = markers.get(id);
+  m?.getElement()?.classList.toggle("hover", on);
+  m?.setZIndexOffset(on ? 1000 : 0);
+};
+$("#area-list").addEventListener("mouseover", (e) => {
+  const card = e.target.closest(".card");
+  if (card) hoverPin(card.dataset.id, true);
+});
+$("#area-list").addEventListener("mouseout", (e) => {
+  const card = e.target.closest(".card");
+  if (card && !card.contains(e.relatedTarget)) hoverPin(card.dataset.id, false);
+});
+
+// Short labels for the small card pill
+const shortLabel = (c) =>
+  ({ "Likely dry": "Dry", "May be damp": "Damp", "Probably wet": "Wet", Raining: "Raining", "Too wet for sandstone": "Too wet" }[c.label] || c.label);
 
 // ---------- Problems ----------
 // Font grade → sortable number: "f6B+" → 6.25, "f5+" → 5.5
@@ -185,10 +237,9 @@ const starsHtml = (n = 0) => (n ? `<span class="stars" aria-label="${n} star${n 
 
 function problemsSection(area) {
   if (!area.problems?.length)
-    return `<h3>Problems</h3><p class="gallery-note">No problem list for this area yet.</p>`;
+    return `<p class="lead muted">No problem list for this area yet. If you know the problems here, they can be added to <code>data/areas.js</code>.</p>`;
   const hasBoulders = area.problems.some((p) => p.boulder);
   return `
-    <h3>Problems <span class="count-inline">(${area.problems.length})</span></h3>
     <div class="problem-controls">
       <div class="chips" role="group" aria-label="Filter by grade">
         ${BANDS.map((b) => `<button type="button" class="chip${b.id === "all" ? " on" : ""}" data-band="${b.id}">${b.label}</button>`).join("")}
@@ -200,9 +251,10 @@ function problemsSection(area) {
         <option value="name">Sort: name</option>
       </select>
     </div>
-    <p id="tick-count" class="gallery-note"></p>
+    <p id="tick-count" class="tick-count"></p>
+    <div class="tick-bar" aria-hidden="true"><span id="tick-bar"></span></div>
     <ul id="problem-list" class="problem-list"></ul>
-    <p class="gallery-note">A selection of problems, not a full guide. Grades are a consensus and can change.</p>`;
+    <p class="fine-print">A selection of problems, not a full guide. Grades are a consensus and can change. Tap a problem for its location, your photo and notes, and beta videos.</p>`;
 }
 
 function wireProblems(area) {
@@ -252,6 +304,7 @@ function wireProblems(area) {
 
     const done = area.problems.filter((p) => ticks.has(tickId(area, p))).length;
     $("#tick-count").textContent = `${done} of ${area.problems.length} ticked`;
+    $("#tick-bar").style.width = `${(done / area.problems.length) * 100}%`;
 
     const openLi = openId && document.querySelector(`.problem[data-pid="${CSS.escape(openId)}"]`);
     if (openLi) fillProblemDetail(openLi, area, byId.get(openId));
@@ -351,34 +404,36 @@ async function fillProblemDetail(li, area, p) {
       <h5>Location</h5>
       ${spot
         ? `<p>${esc(p.boulder)}</p>
-           <div class="parking-actions">
-             <button type="button" data-act="map">Show on map</button>
-             <a href="${walkingUrl(spot.lat, spot.lng)}" target="_blank" rel="noopener">Walking directions</a>
+           <div class="actions">
+             <button type="button" class="btn" data-act="map">Show on map</button>
+             <a class="btn" href="${walkingUrl(spot.lat, spot.lng)}" target="_blank" rel="noopener">Walking directions</a>
            </div>`
-        : `<p class="muted">${p.boulder ? `${esc(p.boulder)} – exact` : "Exact"} boulder position isn't mapped yet, so this points to the crag.</p>
-           <div class="parking-actions">
-             <button type="button" data-act="map">Show crag on map</button>
-             <a href="${walkingUrl(area.lat, area.lng)}" target="_blank" rel="noopener">Walking directions</a>
+        : `<p class="muted">${p.boulder ? `${esc(p.boulder)}: exact` : "Exact"} boulder position isn't mapped yet, so this points to the crag.</p>
+           <div class="actions">
+             <button type="button" class="btn" data-act="map">Show crag on map</button>
+             <a class="btn" href="${walkingUrl(area.lat, area.lng)}" target="_blank" rel="noopener">Walking directions</a>
            </div>`}
     </div>
 
     <div class="pd-section">
       <h5>Photo</h5>
       <div class="pd-photo"></div>
-      <label class="file-btn">
-        <input type="file" accept="image/*" capture="environment" data-act="photo" hidden />
-        <span>Add your photo</span>
-      </label>
-      <button type="button" class="link-btn" data-act="rmphoto" hidden>Remove photo</button>
+      <div class="actions">
+        <label class="file-btn">
+          <input type="file" accept="image/*" capture="environment" data-act="photo" hidden />
+          <span class="btn">Add your photo</span>
+        </label>
+        <button type="button" class="btn" data-act="rmphoto" hidden>Remove photo</button>
+      </div>
     </div>
 
     <div class="pd-section">
       <h5>What it's like</h5>
       ${p.description ? `<p>${esc(p.description)}</p>` : ""}
       <textarea data-act="note" rows="3" placeholder="Your notes: style, beta, conditions, landing…">${esc(note)}</textarea>
-      <div class="parking-actions">
-        <a href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener">Watch beta videos</a>
-        <a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">Search the web</a>
+      <div class="actions">
+        <a class="btn primary" href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener">▶ Watch beta videos</a>
+        <a class="btn" href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">Search the web</a>
       </div>
     </div>`;
 
@@ -390,7 +445,7 @@ async function fillProblemDetail(li, area, p) {
     const box = panel.querySelector(".pd-photo");
     const mine = await photoDb.get(id);
     panel.querySelector('[data-act="rmphoto"]').hidden = !mine;
-    panel.querySelector(".file-btn span").textContent = mine ? "Replace your photo" : "Add your photo";
+    panel.querySelector(".file-btn .btn").textContent = mine ? "Replace your photo" : "Add your photo";
     if (mine) {
       objectUrl = URL.createObjectURL(mine);
       box.innerHTML = `<img src="${objectUrl}" alt="Your photo of ${esc(p.name)}" /><p class="muted">Your photo (saved on this device only)</p>`;
@@ -462,16 +517,23 @@ function renderConditions(area) {
   if (!box) return;
   const w = weather?.get(area.id);
   if (!w) {
-    box.innerHTML = `<p class="gallery-note">Couldn't load the weather right now. Try again later.</p>`;
+    box.innerHTML = `<p class="muted">Couldn't load the weather right now. Try again later.</p>`;
     return;
   }
   const now = assess(area, w, nowIndex(w));
   const days = outlook(area, w);
   const best = bestDay(days);
 
+  const heroPill = document.getElementById("hero-cond");
+  if (heroPill) {
+    heroPill.className = `hero-pill cond-${now.level}`;
+    heroPill.innerHTML = `<i></i>${esc(now.label)}`;
+  }
+
+  box.className = "cond-card";
   box.innerHTML = `
     <div class="cond-now cond-${now.level}">
-      <strong>${esc(now.label)}</strong>
+      <strong><i></i>${esc(now.label)}</strong>
       <span>${now.friction}</span>
     </div>
     <p class="cond-stats">
@@ -495,15 +557,57 @@ function renderConditions(area) {
         )
         .join("")}
     </div>
-    <p class="gallery-note">
-      An estimate from recent rain, humidity and wind, not a reading of the rock. Shaded and woodland boulders
-      can stay damp for longer. Today's daylight: ${days[0]?.sunrise ?? "–"}–${days[0]?.sunset ?? "–"}.
-      Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.
+    <p class="fine-print">
+      Daylight today ${days[0]?.sunrise ?? "–"}–${days[0]?.sunset ?? "–"}. An estimate from recent rain, humidity and wind,
+      not a reading of the rock; shaded and woodland boulders can stay damp for longer.
+      Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.
     </p>`;
+}
+
+// ---------- Walk-ins (precomputed by tools/build_walkins.py) ----------
+const walkLayer = L.layerGroup().addTo(map);
+let walkLines = [];
+
+const walkFor = (area, i) => WALKINS[area.id]?.find((w) => w.parking === i);
+const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
+
+// Shortest walk-in is the "main" one
+function bestWalkIndex(area) {
+  const routed = (WALKINS[area.id] || []).filter((w) => w.path);
+  return routed.length ? routed.reduce((a, b) => (b.minutes < a.minutes ? b : a)).parking : 0;
+}
+
+function walkSummary(area) {
+  const w = walkFor(area, bestWalkIndex(area));
+  return w?.path ? `~${w.minutes} min (${fmtDist(w.distance)})` : area.approach;
+}
+
+function drawWalks(area) {
+  walkLayer.clearLayers();
+  walkLines = (WALKINS[area.id] || []).map((w) =>
+    w.path
+      ? L.polyline(w.path, { weight: 4, dashArray: "6 8", lineCap: "round" })
+          .bindTooltip(`~${w.minutes} min · ${fmtDist(w.distance)} · ↑${w.ascent} m`, { sticky: true })
+          .addTo(walkLayer)
+      : null
+  );
+  highlightWalk(area, bestWalkIndex(area));
+}
+
+function highlightWalk(area, i) {
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--parking").trim() || "#1d5fa8";
+  walkLines.forEach((line, j) => {
+    if (!line) return;
+    const on = (WALKINS[area.id] || [])[j]?.parking === i;
+    line.setStyle({ color: accent, opacity: on ? 0.95 : 0.35, weight: on ? 5 : 3 });
+    if (on) line.bringToFront();
+  });
+  document.querySelectorAll(".parking-item").forEach((li) => li.classList.toggle("walk-on", +li.dataset.parking === i));
 }
 
 // ---------- Detail view ----------
 let activeId = null;
+let currentTab = "overview";
 
 function directionsUrl(lat, lng) {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
@@ -513,64 +617,100 @@ async function showDetail(id) {
   const area = AREAS.find((a) => a.id === id);
   if (!area) return;
 
-  if (activeId) markers.get(activeId).setIcon(cragIcon());
+  const prev = activeId;
   activeId = id;
-  markers.get(id).setIcon(cragIcon(true));
+  if (prev) markers.get(prev).setIcon(cragIcon(condNow(AREAS.find((a) => a.id === prev))?.level));
+  markers.get(id).setIcon(cragIcon(condNow(area)?.level, true)).setZIndexOffset(500);
+  if (prev && prev !== id) markers.get(prev).setZIndexOffset(0);
 
   $("#list-view").hidden = true;
   $("#detail-view").hidden = false;
+  document.body.classList.add("detail-mode");
   $(".sidebar").scrollTop = 0;
   history.replaceState(null, "", `#${id}`);
 
+  const nProblems = area.problems?.length || 0;
+  const mainWalk = walkFor(area, bestWalkIndex(area));
+
   $("#detail").innerHTML = `
-    <h2>${esc(area.name)}</h2>
-    <p class="meta">${esc(area.region)}</p>
-    <div class="facts">
-      <div class="fact"><span>Rock</span><strong>${esc(area.rock)}</strong></div>
-      <div class="fact"><span>Grades</span><strong>${esc(area.grades)}</strong></div>
-      <div class="fact"><span>Approach</span><strong>${esc(area.approach)}</strong></div>
+    <header class="crag-hero" id="hero">
+      <span class="hero-credit" id="hero-credit"></span>
+      <div class="hero-text">
+        <span class="hero-pill" id="hero-cond"></span>
+        <h2>${esc(area.name)}</h2>
+        <p>${esc(area.region)} · ${esc(area.rock)}</p>
+      </div>
+    </header>
+
+    <div class="stats">
+      <div><span>Grades</span><strong>${esc(area.grades.replace(/\s/g, ""))}</strong></div>
+      <div><span>Problems</span><strong>${nProblems || "–"}</strong></div>
+      <div><span>Walk-in</span><strong>${mainWalk?.path ? `~${mainWalk.minutes} min` : esc(area.approach)}</strong></div>
     </div>
-    <p>${esc(area.description)}</p>
 
-    <h3>Conditions</h3>
-    <div id="conditions" class="conditions"><p class="gallery-note">Loading conditions…</p></div>
+    <nav class="tabs" role="tablist" aria-label="Crag sections">
+      <button class="tab" role="tab" data-tab="overview">Overview</button>
+      <button class="tab" role="tab" data-tab="problems">Problems${nProblems ? ` <span class="n">${nProblems}</span>` : ""}</button>
+      <button class="tab" role="tab" data-tab="parking">Parking</button>
+    </nav>
 
-    ${problemsSection(area)}
+    <section class="panel" data-panel="overview" role="tabpanel">
+      <p class="lead">${esc(area.description)}</p>
+      <h3>Conditions</h3>
+      <div id="conditions"><p class="muted">Loading conditions…</p></div>
+      <h3>Photos</h3>
+      <div id="gallery" class="gallery"><p class="gallery-note">Loading photos…</p></div>
+    </section>
 
-    <h3>Parking</h3>
-    <ul class="parking-list">
-      ${area.parking
-        .map(
-          (p, i) => `
-        <li class="parking-item">
-          <h4>${esc(p.name)}</h4>
-          <p>${esc(p.notes)}</p>
-          <p><strong>${esc(p.fee)}</strong></p>
-          <div class="parking-actions">
-            <a href="${directionsUrl(p.lat, p.lng)}" target="_blank" rel="noopener">Directions</a>
-            <button type="button" data-zoom="${i}">Show on map</button>
-          </div>
-        </li>`
-        )
-        .join("")}
-    </ul>
+    <section class="panel" data-panel="problems" role="tabpanel">
+      ${problemsSection(area)}
+    </section>
 
-    <h3>Photos</h3>
-    <div id="gallery" class="gallery"><p class="gallery-note">Loading photos…</p></div>
+    <section class="panel" data-panel="parking" role="tabpanel">
+      <ul class="parking-list">
+        ${area.parking.map((p, i) => parkingCard(area, p, i)).join("")}
+      </ul>
+      ${WALKINS[area.id]?.some((w) => w.path)
+        ? `<p class="fine-print">Walk-ins follow mapped paths from OpenStreetMap. Times use Naismith's rule
+           (5 km/h plus 10 min per 100 m of ascent). Ascent comes from coarse elevation data, so treat it as approximate.</p>`
+        : ""}
+      <p class="disclaimer">
+        Access arrangements change. Check the
+        <a href="https://www.thebmc.co.uk/rad" target="_blank" rel="noopener">BMC Regional Access Database</a>
+        before visiting, park considerately and never block gates.
+      </p>
+    </section>`;
 
-    <p class="disclaimer">
-      Parking locations are approximate and access arrangements change. Check the
-      <a href="https://www.thebmc.co.uk/rad" target="_blank" rel="noopener">BMC Regional Access Database</a>
-      before visiting, park considerately and never block gates.
-    </p>`;
+  // Tabs (the chosen tab sticks as you move between crags)
+  const tabs = $("#detail").querySelectorAll(".tab");
+  const selectTab = (name, scroll) => {
+    currentTab = name;
+    tabs.forEach((t) => t.setAttribute("aria-selected", t.dataset.tab === name));
+    $("#detail").querySelectorAll(".panel").forEach((p) => (p.hidden = p.dataset.panel !== name));
+    if (scroll) {
+      const nav = $("#detail .tabs");
+      const sb = $(".sidebar");
+      if (sb.scrollTop > nav.offsetTop) sb.scrollTop = nav.offsetTop;
+    }
+  };
+  tabs.forEach((t) => t.addEventListener("click", () => selectTab(t.dataset.tab, true)));
+  selectTab(currentTab === "problems" && !nProblems ? "overview" : currentTab, false);
 
-  if (area.problems?.length) wireProblems(area);
+  if (nProblems) wireProblems(area);
   weatherReady.then(() => { if (activeId === id) renderConditions(area); });
 
   $("#detail").querySelectorAll("[data-zoom]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      const p = area.parking[btn.dataset.zoom];
-      map.flyTo([p.lat, p.lng], 16);
+      const i = +btn.dataset.zoom;
+      const p = area.parking[i];
+      const w = walkFor(area, i);
+      if (w?.path) {
+        highlightWalk(area, i);
+        map.flyToBounds(L.latLngBounds(w.path).pad(0.25), { maxZoom: 17 });
+      } else {
+        map.flyTo([p.lat, p.lng], 16);
+      }
+      if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth" });
     })
   );
 
@@ -578,16 +718,30 @@ async function showDetail(id) {
 
   // Parking markers for this area
   parkingLayer.clearLayers();
-  for (const p of area.parking) {
+  area.parking.forEach((p, i) => {
+    const w = walkFor(area, i);
     L.marker([p.lat, p.lng], { icon: parkingIcon, title: p.name })
-      .bindPopup(`<strong>${esc(p.name)}</strong><br>${esc(p.fee)}<br><a href="${directionsUrl(p.lat, p.lng)}" target="_blank" rel="noopener">Directions</a>`)
+      .bindPopup(
+        `<strong>${esc(p.name)}</strong><br>${esc(p.fee)}` +
+          (w?.postcode ? `<br>Sat nav: ${esc(w.postcode)}` : "") +
+          (w?.path ? `<br>Walk-in ~${w.minutes} min, ${fmtDist(w.distance)}` : "") +
+          `<br><a href="${directionsUrl(p.lat, p.lng)}" target="_blank" rel="noopener">Driving directions</a>`
+      )
+      .on("click", () => highlightWalk(area, i))
       .addTo(parkingLayer);
-  }
-  const bounds = L.latLngBounds([[area.lat, area.lng], ...area.parking.map((p) => [p.lat, p.lng])]);
-  map.flyToBounds(bounds.pad(0.6), { maxZoom: 15 });
+  });
+
+  drawWalks(area);
+  const bounds = L.latLngBounds([[area.lat, area.lng], ...area.parking.map((p) => [p.lat, p.lng]), ...(mainWalk?.path || [])]);
+  // Jump rather than fly: a long fly-over from the UK view shows blank tiles for seconds
+  map.fitBounds(bounds.pad(0.3), { maxZoom: 16 });
 
   const photos = await getPhotos(area);
   if (activeId !== id) return; // user moved on
+  if (photos[0]) {
+    $("#hero").style.backgroundImage = `url("${photos[0].url}")`;
+    $("#hero-credit").textContent = photos[0].credit ? `Photo: ${photos[0].credit}` : "";
+  }
   $("#gallery").innerHTML = photos.length
     ? photos
         .map(
@@ -604,14 +758,44 @@ async function showDetail(id) {
 }
 
 function showList() {
-  if (activeId) markers.get(activeId).setIcon(cragIcon());
+  const prev = activeId;
   activeId = null;
+  if (prev) markers.get(prev).setIcon(cragIcon(condNow(AREAS.find((a) => a.id === prev))?.level)).setZIndexOffset(0);
   parkingLayer.clearLayers();
   boulderLayer.clearLayers();
+  walkLayer.clearLayers();
   $("#detail-view").hidden = true;
   $("#list-view").hidden = false;
-  history.replaceState(null, "", location.pathname);
-  map.flyToBounds(L.latLngBounds(AREAS.map((a) => [a.lat, a.lng])).pad(0.1));
+  document.body.classList.remove("detail-mode");
+  history.replaceState(null, "", location.pathname + location.search);
+  fitAll();
+}
+
+function parkingCard(area, p, i) {
+  const w = walkFor(area, i);
+  return `
+    <li class="parking-item" data-parking="${i}">
+      <div class="parking-head">
+        <span class="p-badge" aria-hidden="true">P</span>
+        <h4>${esc(p.name)}</h4>
+      </div>
+      <div class="parking-meta">
+        <span><strong>${esc(p.fee)}</strong></span>
+        ${w?.postcode
+          ? `<span>Sat nav <strong>${esc(w.postcode)}</strong>${w.postcodeDistance > 150 ? ` (nearest, ${fmtDist(w.postcodeDistance)} away)` : ""}</span>`
+          : ""}
+      </div>
+      ${w?.path
+        ? `<div class="walk-line"><span>Walk-in <strong>~${w.minutes} min</strong></span><span>${fmtDist(w.distance)}</span><span>↑${w.ascent} m</span></div>`
+        : w?.unrouted
+          ? `<div class="walk-line muted">No walking route mapped. ${fmtDist(w.straight)} in a straight line.</div>`
+          : ""}
+      <p>${esc(p.notes)}</p>
+      <div class="actions">
+        <a class="btn primary" href="${directionsUrl(p.lat, p.lng)}" target="_blank" rel="noopener">Driving directions</a>
+        <button type="button" class="btn" data-zoom="${i}">${w?.path ? "Show walk-in" : "Show on map"}</button>
+      </div>
+    </li>`;
 }
 
 $("#back").addEventListener("click", showList);
@@ -633,5 +817,6 @@ addEventListener("hashchange", () => {
 // Keep the map sized correctly if the layout changes (e.g. it was hidden at load, or the phone rotates)
 new ResizeObserver(() => {
   map.invalidateSize();
-  if (!activeId) fitAll();
+  // Skip fitting while the map has no real size yet (e.g. a hidden pane), or Leaflet zooms right out
+  if (!activeId && $("#map").clientHeight > 50) fitAll();
 }).observe($("#map"));
