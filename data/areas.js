@@ -280,7 +280,7 @@ export const AREAS = [
     id: "the-roaches",
     name: "The Roaches",
     region: "Peak District (Staffordshire)",
-    lat: 53.164, lng: -2.0,
+    lat: 53.1568, lng: -1.993,
     rock: "Gritstone",
     grades: "f3 – f8B",
     approach: "15 min",

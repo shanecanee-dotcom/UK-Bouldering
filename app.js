@@ -1,6 +1,32 @@
 import { AREAS } from "./data/areas.js";
 import { loadWeather, nowIndex, assess, outlook, bestDay } from "./conditions.js";
 import { WALKINS } from "./data/walkins.js";
+import { OSM } from "./data/osm.js";
+
+// Merge boulders and problems mapped in OpenStreetMap (data/osm.js, built by tools/build_osm.py).
+// Boulders within 20 m of one we already list are the same boulder under another name: keep ours.
+// Problems we already list gain their exact position; new ones are added.
+for (const a of AREAS) {
+  const o = OSM[a.id];
+  if (!o) continue;
+  a.boulders = { ...(a.boulders || {}) };
+  const alias = {};
+  for (const [name, pos] of Object.entries(o.boulders)) {
+    const same = Object.entries(a.boulders).find(([, b]) => L.latLng(b).distanceTo(pos) < 20);
+    if (same) alias[name] = same[0];
+    else a.boulders[name] = pos;
+  }
+  a.problems = [...(a.problems || [])];
+  for (const op of o.problems) {
+    const match = a.problems.find((p) => p.name.toLowerCase() === op.name.toLowerCase());
+    if (match) {
+      if (match.lat == null) Object.assign(match, { lat: op.lat, lng: op.lng });
+      continue;
+    }
+    const boulder = op.boulder ? alias[op.boulder] || op.boulder : undefined;
+    a.problems.push({ name: op.name, grade: op.grade, ...(boulder && { boulder }), lat: op.lat, lng: op.lng, source: "osm" });
+  }
+}
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) =>
@@ -259,8 +285,18 @@ const shortLabel = (c) =>
   ({ "Likely dry": "Dry", "May be damp": "Damp", "Probably wet": "Wet", Raining: "Raining", "Too wet for sandstone": "Too wet" }[c.label] || c.label);
 
 // ---------- Problems ----------
-// Font grade → sortable number: "f6B+" → 6.25, "f5+" → 5.5
+// V grades (some OpenStreetMap data) on the same scale as Font, using the usual conversion
+const V_TO_FONT = {
+  VB: 3, "V0-": 3.5, V0: 4, "V0+": 4.5, V1: 5, V2: 5.5, V3: 6, V4: 6.25, V5: 6.5, V6: 7,
+  V7: 7.125, V8: 7.25, V9: 7.5, V10: 7.625, V11: 8, V12: 8.125, V13: 8.25, V14: 8.5, V15: 8.625, V16: 8.75,
+};
+
+// Font grade → sortable number: "f6B+" → 6.25, "f5+" → 5.5 (V grades via the table above)
 function gradeValue(grade) {
+  const g = grade.trim().toUpperCase();
+  if (V_TO_FONT[g] != null) return V_TO_FONT[g];
+  const vm = /^(V\d+)([+-])$/.exec(g); // e.g. "V3+" → just above V3
+  if (vm && V_TO_FONT[vm[1]] != null) return V_TO_FONT[vm[1]] + (vm[2] === "+" ? 0.06 : -0.06);
   const m = /^f?(\d)([ABC])?(\+)?$/i.exec(grade.trim());
   if (!m) return 99;
   const [, n, letter, plus] = m;
@@ -297,8 +333,8 @@ function problemsSection(area) {
         ${BANDS.map((b) => `<button type="button" class="chip${b.id === "all" ? " on" : ""}" data-band="${b.id}">${b.label}</button>`).join("")}
       </div>
       <select id="problem-sort" aria-label="Sort problems">
+        ${hasBoulders ? `<option value="boulder" selected>Sort: boulder</option>` : ""}
         <option value="grade">Sort: grade</option>
-        ${hasBoulders ? `<option value="boulder">Sort: boulder</option>` : ""}
         ${area.problems.some((p) => p.stars) ? `<option value="stars">Sort: stars</option>` : ""}
         <option value="name">Sort: name</option>
       </select>
@@ -306,6 +342,13 @@ function problemsSection(area) {
     <p id="tick-count" class="tick-count"></p>
     <div class="tick-bar" aria-hidden="true"><span id="tick-bar"></span></div>
     <ul id="problem-list" class="problem-list"></ul>
+    <div id="pin-export" class="pin-export" hidden>
+      <span>You've added <strong class="n"></strong> at this crag.</span>
+      <button type="button" class="btn" id="copy-pins">Copy pins</button>
+    </div>
+    ${area.problems.some((p) => p.source === "osm")
+      ? `<p class="fine-print">Includes problems mapped in <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (© OpenStreetMap contributors, ODbL), with V grades as mapped.</p>`
+      : ""}
     <p class="fine-print">A selection of problems, not a full guide. Grades are a consensus and can change. Tap a problem for its location, your photo and notes, and beta videos.</p>`;
 }
 
@@ -381,6 +424,8 @@ function wireProblems(area) {
     })
   );
   $("#problem-sort").addEventListener("change", render);
+  $("#copy-pins").addEventListener("click", () => copyPins(area));
+  updatePinExport(area);
   $("#problem-list").addEventListener("change", (e) => {
     const id = e.target.dataset.tick;
     if (!id) return;
@@ -447,24 +492,36 @@ let objectUrl = null;
 
 async function fillProblemDetail(li, area, p) {
   const id = tickId(area, p);
-  const spot = p.boulder && area.boulders?.[p.boulder];
+  const spot = spotFor(area, p);
   const q = encodeURIComponent(`${p.name} ${area.name} boulder ${p.grade.replace(/^f/, "")}`);
   const note = loadNotes()[id] || "";
+  const what = p.boulder ? esc(p.boulder) : "this problem";
 
   li.querySelector(".problem-detail").innerHTML = `
     <div class="pd-section">
       <h5>Location</h5>
       ${spot
-        ? `<p>${esc(p.boulder)}</p>
+        ? `<p>${p.boulder ? esc(p.boulder) : spot.exact ? "Mapped problem" : "Pinned"}${spot.mine
+              ? ` <span class="pin-tag">Your pin${spot.acc ? `, ±${Math.round(spot.acc)} m` : ""}</span>`
+              : ` <span class="muted">(${spot.exact ? "exact problem position, " : ""}OpenStreetMap)</span>`}</p>
            <div class="actions">
              <button type="button" class="btn" data-act="map">Show on map</button>
              <a class="btn" href="${walkingUrl(spot.lat, spot.lng)}" target="_blank" rel="noopener">Walking directions</a>
            </div>`
-        : `<p class="muted">${p.boulder ? `${esc(p.boulder)}: exact` : "Exact"} boulder position isn't mapped yet, so this points to the crag.</p>
+        : `<p class="muted">${p.boulder ? `${esc(p.boulder)}: exact` : "Exact"} position isn't mapped yet, so this points to the crag.</p>
            <div class="actions">
              <button type="button" class="btn" data-act="map">Show crag on map</button>
              <a class="btn" href="${walkingUrl(area.lat, area.lng)}" target="_blank" rel="noopener">Walking directions</a>
            </div>`}
+      <div class="pin-box">
+        <p class="muted">${spot?.mine ? `Move your pin for ${what}:` : `At the boulder? Pin ${what} so it's on your map next time.`}</p>
+        <div class="actions">
+          <button type="button" class="btn" data-act="pin-gps">📍 Use my location</button>
+          <button type="button" class="btn" data-act="pin-map">Place on map</button>
+          ${spot?.mine ? `<button type="button" class="btn" data-act="pin-rm">Remove pin</button>` : ""}
+        </div>
+        <p class="muted pin-status" role="status"></p>
+      </div>
     </div>
 
     <div class="pd-section">
@@ -510,9 +567,64 @@ async function fillProblemDetail(li, area, p) {
   showPhoto();
 
   panel.querySelector('[data-act="map"]').addEventListener("click", () => {
-    if (spot) focusBoulder(p.boulder);
-    else map.flyTo([area.lat, area.lng], 16);
-    if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth" });
+    if (spot && (spot.exact || !focusBoulder(markerKey(p)))) focusSpot(spot, p);
+    else if (!spot) map.flyTo([area.lat, area.lng], 16);
+    showMapOnPhone();
+  });
+
+  // ----- Pinning -----
+  const status = panel.querySelector(".pin-status");
+  const refresh = () => {
+    showBoulders(area);
+    fillProblemDetail(li, area, p);
+    updatePinExport(area);
+  };
+  const save = (lat, lng, acc, source) => {
+    savePin(area, p, { lat, lng, acc, source });
+    refresh();
+    focusBoulder(markerKey(p));
+    toast(p.boulder ? `Pinned ${p.boulder}` : `Pinned ${p.name}`);
+  };
+
+  panel.querySelector('[data-act="pin-gps"]').addEventListener("click", () => {
+    if (!navigator.geolocation) return (status.textContent = "This device can't share its location.");
+    status.textContent = "Finding your location… (stay in the open for a better fix)";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        showYouAreHere(latitude, longitude, accuracy);
+        const far = map.distance([latitude, longitude], [area.lat, area.lng]);
+        if (far > 3000) {
+          status.textContent = `You're ${fmtDist(far)} from ${area.name}, so the pin wasn't saved. Use "Place on map" instead.`;
+          return;
+        }
+        if (accuracy > 40 && !confirm(`GPS accuracy is only ±${Math.round(accuracy)} m. Save the pin anyway? (You can move it later with "Place on map".)`)) {
+          status.textContent = "Not saved.";
+          return;
+        }
+        save(latitude, longitude, accuracy, "gps");
+      },
+      (err) => {
+        status.textContent =
+          err.code === err.PERMISSION_DENIED
+            ? "Location permission is off for this site. Allow it in your browser settings, or use \"Place on map\"."
+            : "Couldn't get a location fix. Try again in the open, or use \"Place on map\".";
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  });
+
+  panel.querySelector('[data-act="pin-map"]').addEventListener("click", () => {
+    status.textContent = "";
+    startPlacing(p.boulder || p.name, (latlng) => save(latlng.lat, latlng.lng, null, "map"));
+    if (!spot) map.flyTo([area.lat, area.lng], 17);
+    else map.flyTo([spot.lat, spot.lng], 18);
+  });
+
+  panel.querySelector('[data-act="pin-rm"]')?.addEventListener("click", () => {
+    removePin(area, p);
+    refresh();
+    toast("Pin removed");
   });
   panel.querySelector('[data-act="photo"]').addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
@@ -535,6 +647,113 @@ async function fillProblemDetail(li, area, p) {
   });
 }
 
+// ---------- Your pins ----------
+// Pins are per boulder (so one pin covers every problem on it), or per problem when no boulder is
+// recorded. Stored on this device for now; the record shape is ready to sync to a server later.
+const PINS_KEY = "ukboulders.pins";
+const pinKey = (area, p) => (p.boulder ? `${area.id}|b:${p.boulder}` : `${area.id}|p:${p.name}/${p.grade}`);
+const markerKey = (p) => (p.boulder ? `b:${p.boulder}` : `p:${p.name}/${p.grade}`);
+
+function loadPins() {
+  try { return JSON.parse(localStorage.getItem(PINS_KEY)) || {}; } catch { return {}; }
+}
+function writePins(pins) {
+  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch {}
+}
+function savePin(area, p, { lat, lng, acc, source }) {
+  const pins = loadPins();
+  pins[pinKey(area, p)] = {
+    area: area.id,
+    boulder: p.boulder || null,
+    problem: p.boulder ? null : { name: p.name, grade: p.grade },
+    lat: +lat.toFixed(6),
+    lng: +lng.toFixed(6),
+    acc: acc ? Math.round(acc) : null,
+    source,
+    updatedAt: new Date().toISOString(),
+  };
+  writePins(pins);
+}
+function removePin(area, p) {
+  const pins = loadPins();
+  delete pins[pinKey(area, p)];
+  writePins(pins);
+}
+const pinsFor = (area) => Object.values(loadPins()).filter((x) => x.area === area.id);
+
+// Your pin wins over mapped data on this device; a problem's own position beats its boulder's
+function spotFor(area, p) {
+  const mine = loadPins()[pinKey(area, p)];
+  if (mine) return { lat: mine.lat, lng: mine.lng, acc: mine.acc, mine: true };
+  if (p.lat != null) return { lat: p.lat, lng: p.lng, mine: false, exact: true };
+  const b = p.boulder && area.boulders?.[p.boulder];
+  return b ? { lat: b.lat, lng: b.lng, mine: false } : null;
+}
+
+// "Place on map": the next map tap sets the pin
+let placing = null;
+function startPlacing(label, onPlace) {
+  cancelPlacing();
+  const bar = L.DomUtil.create("div", "place-bar");
+  bar.innerHTML = `<span>Tap the map where <strong>${esc(label)}</strong> is</span><button type="button">Cancel</button>`;
+  map.getContainer().append(bar);
+  L.DomEvent.disableClickPropagation(bar);
+  bar.querySelector("button").addEventListener("click", cancelPlacing);
+  map.getContainer().classList.add("placing");
+  const handler = (e) => {
+    cancelPlacing();
+    onPlace(e.latlng);
+  };
+  map.once("click", handler);
+  placing = { bar, handler };
+  showMapOnPhone();
+}
+function cancelPlacing() {
+  if (!placing) return;
+  placing.bar.remove();
+  map.off("click", placing.handler);
+  map.getContainer().classList.remove("placing");
+  placing = null;
+}
+
+// Blue "you are here" dot with its accuracy circle
+const youLayer = L.layerGroup().addTo(map);
+function showYouAreHere(lat, lng, acc) {
+  youLayer.clearLayers();
+  L.circle([lat, lng], { radius: acc, weight: 1, color: "#2b7de9", fillColor: "#2b7de9", fillOpacity: 0.12, interactive: false }).addTo(youLayer);
+  L.circleMarker([lat, lng], { radius: 6, weight: 2, color: "#fff", fillColor: "#2b7de9", fillOpacity: 1 })
+    .bindTooltip("You are here")
+    .addTo(youLayer);
+}
+
+function showMapOnPhone() {
+  if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth" });
+}
+
+// Copy your pins in the data-file format, so they can be added for everyone
+function updatePinExport(area) {
+  const box = document.getElementById("pin-export");
+  if (!box) return;
+  const mine = pinsFor(area);
+  box.hidden = !mine.length;
+  if (!mine.length) return;
+  box.querySelector(".n").textContent = `${mine.length} pin${mine.length === 1 ? "" : "s"}`;
+}
+async function copyPins(area) {
+  const lines = pinsFor(area).map((x) =>
+    x.boulder
+      ? `      ${JSON.stringify(x.boulder)}: { lat: ${x.lat}, lng: ${x.lng} },`
+      : `      // problem without a boulder name: ${x.problem.name} (${x.problem.grade}) at ${x.lat}, ${x.lng}`
+  );
+  const text = `// ${area.name}: pins from UK Boulders, add to "boulders" in data/areas.js\n${lines.join("\n")}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Pins copied");
+  } catch {
+    prompt("Copy your pins:", text);
+  }
+}
+
 // ---------- Boulder markers ----------
 const boulderLayer = L.layerGroup().addTo(map);
 const boulderMarkers = new Map();
@@ -542,22 +761,50 @@ const boulderMarkers = new Map();
 function showBoulders(area) {
   boulderLayer.clearLayers();
   boulderMarkers.clear();
-  for (const [name, b] of Object.entries(area.boulders || {})) {
-    const count = (area.problems || []).filter((p) => p.boulder === name).length;
-    const m = L.circleMarker([b.lat, b.lng], {
-      radius: 7, weight: 2, color: "#fff", fillColor: "#d1582c", fillOpacity: 0.9,
+  const add = (key, name, lat, lng, mine, count, acc) => {
+    const m = L.circleMarker([lat, lng], {
+      radius: mine ? 8 : 7,
+      weight: 2,
+      color: "#fff",
+      fillColor: mine ? "#7b5cd6" : "#d1582c",
+      fillOpacity: 0.95,
     })
       .bindTooltip(name)
-      .bindPopup(`<strong>${esc(name)}</strong><br>${count} problem${count === 1 ? "" : "s"} listed<br><a href="${walkingUrl(b.lat, b.lng)}" target="_blank" rel="noopener">Walking directions</a>`)
+      .bindPopup(
+        `<strong>${esc(name)}</strong>${mine ? `<br><em>Your pin${acc ? ` (±${acc} m)` : ""}</em>` : ""}` +
+          (count ? `<br>${count} problem${count === 1 ? "" : "s"} listed` : "") +
+          `<br><a href="${walkingUrl(lat, lng)}" target="_blank" rel="noopener">Walking directions</a>`
+      )
       .addTo(boulderLayer);
-    boulderMarkers.set(name, m);
+    boulderMarkers.set(key, m);
+  };
+  const mine = pinsFor(area);
+  const minePinned = new Set(mine.filter((x) => x.boulder).map((x) => x.boulder));
+  for (const [name, b] of Object.entries(area.boulders || {})) {
+    if (minePinned.has(name)) continue; // your pin replaces it on this device
+    add(`b:${name}`, name, b.lat, b.lng, false, (area.problems || []).filter((p) => p.boulder === name).length);
+  }
+  for (const x of mine) {
+    if (x.boulder) add(`b:${x.boulder}`, x.boulder, x.lat, x.lng, true, (area.problems || []).filter((p) => p.boulder === x.boulder).length, x.acc);
+    else add(`p:${x.problem.name}/${x.problem.grade}`, `${x.problem.name} (${x.problem.grade})`, x.lat, x.lng, true, 0, x.acc);
   }
 }
 
-function focusBoulder(name) {
-  const m = boulderMarkers.get(name);
-  if (!m) return;
-  map.flyTo(m.getLatLng(), 17);
+function focusBoulder(key) {
+  const m = boulderMarkers.get(key);
+  if (!m) return false;
+  map.flyTo(m.getLatLng(), 18);
+  map.once("moveend", () => m.openPopup());
+  return true;
+}
+
+// A problem with its own mapped position: show a marker right on the start
+function focusSpot(spot, p) {
+  youLayer.clearLayers();
+  const m = L.circleMarker([spot.lat, spot.lng], { radius: 7, weight: 3, color: "#fff", fillColor: "#d1582c", fillOpacity: 1 })
+    .bindPopup(`<strong>${esc(p.name)}</strong> ${esc(p.grade)}<br><a href="${walkingUrl(spot.lat, spot.lng)}" target="_blank" rel="noopener">Walking directions</a>`)
+    .addTo(youLayer);
+  map.flyTo([spot.lat, spot.lng], 19);
   map.once("moveend", () => m.openPopup());
 }
 
@@ -778,6 +1025,8 @@ async function showDetail(id) {
     })
   );
 
+  cancelPlacing();
+  youLayer.clearLayers();
   showBoulders(area);
 
   // Parking markers for this area
@@ -828,6 +1077,8 @@ function showList() {
   parkingLayer.clearLayers();
   boulderLayer.clearLayers();
   walkLayer.clearLayers();
+  youLayer.clearLayers();
+  cancelPlacing();
   $("#detail-view").hidden = true;
   $("#list-view").hidden = false;
   document.body.classList.remove("detail-mode");
