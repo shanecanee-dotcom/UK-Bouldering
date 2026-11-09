@@ -36,7 +36,7 @@ def get_json(url, tries=4):
 def parse_areas():
     src = (ROOT / "data/areas.js").read_text()
     areas = []
-    for m in re.finditer(r'\n  \{\n    id: "([^"]+)",.*?\n    lat: ([-\d.]+), lng: ([-\d.]+),.*?parking: \[\n(.*?)\n    \],', src, re.S):
+    for m in re.finditer(r'\n  \{\n    id: "([^"]+)",.*?\n    lat: ([-\d.]+), lng: ([-\d.]+),.*?parking: \[\n?(.*?)\n?    \],', src, re.S):  # also matches an empty list
         parking = [
             {"name": p[0], "lat": float(p[1]), "lng": float(p[2])}
             for p in re.findall(r'\{ name: "((?:[^"\\]|\\.)*)", lat: ([-\d.]+), lng: ([-\d.]+),', m.group(4))

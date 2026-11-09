@@ -7,12 +7,64 @@ const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ---------- Map ----------
-// Fractional zoom so the whole UK fits short (phone) maps without dropping to a Europe-wide view
-const map = L.map("map", { zoomControl: true, zoomSnap: 0.25 }).setView([54.3, -2.5], 6);
+// zoomSnap 0 = continuous zoom: needed for smooth trackpad zooming, and lets the whole UK
+// fit short (phone) maps. Leaflet's own wheel zoom is replaced below.
+const map = L.map("map", { zoomControl: true, zoomSnap: 0, zoomDelta: 1, scrollWheelZoom: false, minZoom: 4, maxZoom: 18 })
+  .setView([54.3, -2.5], 6);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 18,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
+
+// Smooth wheel / trackpad zoom.
+// Leaflet's built-in handler debounces wheel events, rounds each burst to a zoom step and plays a
+// 250 ms animation, so trackpad pinches (lots of tiny events) feel laggy. Instead, apply the
+// accumulated delta once per animation frame, zooming around the pointer.
+(() => {
+  const el = map.getContainer();
+  let pending = 0;
+  let anchor = null;
+  let frame = 0;
+
+  const apply = () => {
+    frame = 0;
+    if (!pending) return;
+    const z = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), map.getZoom() + pending));
+    pending = 0;
+    map.setZoomAround(anchor, z, { animate: false });
+  };
+  const queue = (dz, clientX, clientY) => {
+    pending += dz;
+    const r = el.getBoundingClientRect();
+    anchor = L.point(clientX - r.left, clientY - r.top);
+    frame ||= requestAnimationFrame(apply);
+  };
+
+  el.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1);
+      // Pinch arrives as ctrl+wheel with small deltas; mouse wheels and two-finger scrolls send bigger ones
+      const perPx = e.ctrlKey ? 0.012 : 0.004;
+      queue(Math.max(-1, Math.min(1, -px * perPx)), e.clientX, e.clientY);
+    },
+    { passive: false }
+  );
+
+  // Safari sends trackpad pinches as gesture events (scale relative to the gesture start)
+  let startZoom = null;
+  el.addEventListener("gesturestart", (e) => { e.preventDefault(); startZoom = map.getZoom(); });
+  el.addEventListener("gesturechange", (e) => {
+    e.preventDefault();
+    if (startZoom == null) return;
+    pending = startZoom + Math.log2(e.scale) - map.getZoom();
+    const r = el.getBoundingClientRect();
+    anchor = L.point(e.clientX - r.left, e.clientY - r.top);
+    frame ||= requestAnimationFrame(apply);
+  });
+  el.addEventListener("gestureend", (e) => { e.preventDefault(); startZoom = null; });
+})();
 
 // Crag pins are coloured by today's conditions once the weather has loaded
 const cragIcon = (level = "unknown", active = false) => {
@@ -667,9 +719,10 @@ async function showDetail(id) {
     </section>
 
     <section class="panel" data-panel="parking" role="tabpanel">
-      <ul class="parking-list">
-        ${area.parking.map((p, i) => parkingCard(area, p, i)).join("")}
-      </ul>
+      ${area.parking.length
+        ? `<ul class="parking-list">${area.parking.map((p, i) => parkingCard(area, p, i)).join("")}</ul>`
+        : area.parkingNote ? "" : `<p class="lead muted">No car park is mapped for this crag yet.</p>`}
+      ${area.parkingNote ? `<p class="cond-warn">${esc(area.parkingNote)}</p>` : ""}
       ${WALKINS[area.id]?.some((w) => w.path)
         ? `<p class="fine-print">Walk-ins follow mapped paths from OpenStreetMap. Times use Naismith's rule
            (5 km/h plus 10 min per 100 m of ascent). Ascent comes from coarse elevation data, so treat it as approximate.</p>`
