@@ -9,7 +9,7 @@
 //
 // Bump VERSION whenever the list of app files changes.
 
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL = `shell-${VERSION}`;
 const TILES = "tiles";
 const PHOTOS = "photos";
@@ -36,7 +36,11 @@ const LIMITS = { [TILES]: 2500, [PHOTOS]: 300, [API]: 100 };
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting())
+    caches
+      .open(SHELL)
+      // "reload" skips the browser's HTTP cache so a new version never starts with stale files
+      .then((c) => c.addAll(SHELL_FILES.map((u) => new Request(u, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -95,10 +99,22 @@ async function networkFirst(req, cacheName, timeoutMs, isNavigation = false) {
   if (isNavigation) url.search = "";
   const key = url.href;
 
-  const network = fetch(req).then(async (res) => {
+  // Our own files: ask the server every time ("no-cache" revalidates, so it's a tiny 304 when
+  // nothing changed). Otherwise the browser's HTTP cache (GitHub Pages allows 10 minutes) can hand
+  // us an old app.js, which we'd then save and keep serving.
+  const own = url.origin === self.location.origin;
+  const request = !own ? req : isNavigation
+    ? new Request(req.url, { cache: "no-cache", credentials: "same-origin" })
+    : new Request(req, { cache: "no-cache" });
+
+  let servedCache = false;
+  const network = fetch(request).then(async (res) => {
     if (res.ok) {
+      const old = own ? await cache.match(key) : null;
       await cache.put(key, res.clone());
       if (LIMITS[cacheName]) trim(cacheName);
+      // The page got our saved copy (slow signal) but the server has a newer one: tell the page
+      if (servedCache && old && stamp(old) !== stamp(res)) notifyUpdate();
     }
     return res;
   });
@@ -110,12 +126,23 @@ async function networkFirst(req, cacheName, timeoutMs, isNavigation = false) {
   const first = await Promise.race([network.catch(() => null), timeout]);
   if (first && first.ok) return first;
 
+  servedCache = true;
   const cached =
     (await cache.match(key)) ||
     // Offline page load of the app under any address in scope: fall back to the cached app page
     (isNavigation && (await cache.match(new URL("index.html", self.registration.scope).href)));
   if (cached) return cached;
   return network; // nothing cached: wait for the network (or fail)
+}
+
+const stamp = (res) => res.headers.get("etag") || res.headers.get("last-modified") || "";
+
+let notified = false;
+async function notifyUpdate() {
+  if (notified) return;
+  notified = true;
+  for (const client of await self.clients.matchAll({ type: "window" })) client.postMessage({ type: "update-available" });
+  setTimeout(() => (notified = false), 60000);
 }
 
 // Keep caches bounded: drop the oldest entries beyond the limit

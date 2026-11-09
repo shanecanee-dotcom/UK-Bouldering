@@ -176,6 +176,59 @@ function stripTags(html) {
   return div.textContent.trim();
 }
 
+// ---------- Rock types ----------
+// Swatch colour roughly like the rock, plus what it's like to climb on and how to look after it
+const ROCKS = {
+  Gritstone: {
+    swatch: "#a68a64",
+    about: "Coarse, very grippy sandstone with rounded breaks, slopers and pebbles. At its best on cold, dry, breezy days; exposed boulders dry quickly after rain.",
+    tips: ["Friction drops off fast in warm or humid weather.", "Brush holds with a soft brush; never chip, wire-brush or use resin."],
+  },
+  Sandstone: {
+    swatch: "#d9a35f",
+    about: "Softer sandstone that's easily damaged, above all when wet: holds can snap and the surface wears away.",
+    tips: ["Never climb on it damp. Give it at least a full dry day after rain.", "Brush gently, keep chalk to a minimum, and never use resin or wire brushes."],
+  },
+  Granite: {
+    swatch: "#b9b2a8",
+    about: "Very coarse, crystalline rock with superb friction: rough slabs, arêtes and crystal pulls. Sharp on the skin.",
+    tips: ["Feels best in cool, breezy weather.", "Pace yourself: skin goes quickly on long sessions."],
+  },
+  Gabbro: {
+    swatch: "#4b5257",
+    about: "Rough, dark igneous rock with excellent friction and plenty of features. Hard on the skin.",
+    tips: ["On beach boulders, check the tide and watch for slippery weed near the base."],
+  },
+  Basalt: {
+    swatch: "#3a3f44",
+    about: "Hard, dark volcanic rock. Problems tend to be technical and crimpy, and popular lines can be polished.",
+    tips: ["Polish plus humidity can make it feel slippery: pick a cool, breezy day."],
+  },
+  Rhyolite: {
+    swatch: "#b77b6b",
+    about: "Hard, compact volcanic rock with sharp edges, pockets and cracks.",
+    tips: ["Can be slick when wet or where it's polished."],
+  },
+  Volcanic: {
+    swatch: "#6f7d74",
+    about: "Hard, compact volcanic rock with edges, pockets and steep faces.",
+    tips: ["Can be slick when wet: let it dry before pulling hard."],
+  },
+  Schist: {
+    swatch: "#8b8f7a",
+    about: "Layered metamorphic rock with lots of edges and flakes; riverside blocks can be smooth.",
+    tips: ["Slippery when wet, especially close to the river."],
+  },
+};
+const rockChip = (rock, cls = "") =>
+  `<span class="rock-chip ${cls}" title="Rock: ${esc(rock)}"><i style="background:${ROCKS[rock]?.swatch || "#999"}"></i>${esc(rock)}</span>`;
+
+const rocks = [...new Set(AREAS.map((a) => a.rock))].sort();
+$("#rock").insertAdjacentHTML(
+  "beforeend",
+  rocks.map((r) => `<option value="${esc(r)}">${esc(r)} (${AREAS.filter((a) => a.rock === r).length})</option>`).join("")
+);
+
 // ---------- List view ----------
 const regions = [...new Set(AREAS.map((a) => a.region))].sort();
 $("#region").insertAdjacentHTML("beforeend", regions.map((r) => `<option>${esc(r)}</option>`).join(""));
@@ -204,9 +257,11 @@ const LEVEL_RANK = { dry: 0, damp: 1, wet: 2 };
 function renderList() {
   const q = $("#search").value.trim().toLowerCase();
   const region = $("#region").value;
+  const rock = $("#rock").value;
   const shown = AREAS.filter(
     (a) =>
       (!region || a.region === region) &&
+      (!rock || a.rock === rock) &&
       (!q || [a.name, a.region, a.rock, a.description].join(" ").toLowerCase().includes(q))
   );
   if ($("#list-sort").value === "driest" && weather) {
@@ -233,7 +288,7 @@ function renderList() {
               <h3>${esc(a.name)}</h3>
               ${c ? `<span class="pill cond-${c.level}" title="${esc(c.label)}"><i></i>${esc(shortLabel(c))}</span>` : ""}
             </div>
-            <p class="meta">${esc(a.region)} · ${esc(a.rock)}</p>
+            <p class="meta">${esc(a.region)} ${rockChip(a.rock)}</p>
             <p class="card-stats">
               <span>${esc(a.grades.replace(/\s/g, ""))}</span>
               ${a.problems?.length ? `<span>${a.problems.length} problems</span>` : ""}
@@ -259,6 +314,7 @@ function renderList() {
 
 $("#search").addEventListener("input", renderList);
 $("#region").addEventListener("change", renderList);
+$("#rock").addEventListener("change", renderList);
 $("#list-sort").addEventListener("change", renderList);
 $("#area-list").addEventListener("click", (e) => {
   const card = e.target.closest(".card");
@@ -946,7 +1002,7 @@ async function showDetail(id) {
       <div class="hero-text">
         <span class="hero-pill" id="hero-cond"></span>
         <h2>${esc(area.name)}</h2>
-        <p>${esc(area.region)} · ${esc(area.rock)}</p>
+        <p>${esc(area.region)} ${rockChip(area.rock, "on-photo")}</p>
       </div>
     </header>
 
@@ -964,6 +1020,14 @@ async function showDetail(id) {
 
     <section class="panel" data-panel="overview" role="tabpanel">
       <p class="lead">${esc(area.description)}</p>
+      ${ROCKS[area.rock]
+        ? `<h3>Rock</h3>
+           <div class="rock-card" style="--swatch:${ROCKS[area.rock].swatch}">
+             <div class="rock-head">${rockChip(area.rock)}</div>
+             <p>${esc(ROCKS[area.rock].about)}</p>
+             <ul>${ROCKS[area.rock].tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+           </div>`
+        : ""}
       <h3>Conditions</h3>
       <div id="conditions"><p class="muted">Loading conditions…</p></div>
       <h3>Photos</h3>
@@ -1130,18 +1194,70 @@ addEventListener("hashchange", () => {
 });
 
 // ---------- Offline support ----------
-function toast(text) {
+// Short notice; pass an action to make it stay until tapped, e.g. { label: "Reload", run: fn }
+function toast(text, action) {
   const t = document.createElement("div");
   t.className = "toast";
   t.setAttribute("role", "status");
   t.textContent = text;
-  document.body.append(t);
-  requestAnimationFrame(() => t.classList.add("show"));
-  setTimeout(() => {
+  const close = () => {
     t.classList.remove("show");
     setTimeout(() => t.remove(), 400);
-  }, 4000);
+  };
+  if (action) {
+    t.classList.add("has-action");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = action.label;
+    b.addEventListener("click", () => { close(); action.run(); });
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "dismiss";
+    x.setAttribute("aria-label", "Dismiss");
+    x.textContent = "×";
+    x.addEventListener("click", close);
+    t.append(b, x);
+  }
+  document.body.append(t);
+  requestAnimationFrame(() => t.classList.add("show"));
+  if (!action) setTimeout(close, 4000);
 }
+
+// ---------- Updates ----------
+// Make sure a phone that keeps the app open (or resumes it from the home screen) doesn't stay on
+// an old version: offer a reload when a newer version is detected.
+let updateShown = false;
+function offerUpdate() {
+  if (updateShown) return;
+  updateShown = true;
+  toast("New version available", { label: "Reload", run: () => location.reload() });
+}
+
+// Fingerprint of the app's files on the server (ETag / Last-Modified), without downloading them.
+// HEAD requests skip the service worker, so this always asks GitHub.
+const WATCHED = ["index.html", "app.js", "conditions.js", "styles.css", "data/areas.js", "data/osm.js", "data/walkins.js"];
+async function serverStamp() {
+  try {
+    const rs = await Promise.all(WATCHED.map((f) => fetch(f, { method: "HEAD", cache: "no-cache" })));
+    if (rs.some((r) => !r.ok)) return null;
+    return rs.map((r) => r.headers.get("etag") || r.headers.get("last-modified") || "").join("|");
+  } catch {
+    return null; // offline
+  }
+}
+let loadedStamp = null;
+serverStamp().then((s) => (loadedStamp = s));
+
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) return void (hiddenAt = Date.now());
+  // Back in the app after a while: check for a newer version
+  if (Date.now() - hiddenAt < 30 * 60 * 1000) return;
+  navigator.serviceWorker?.getRegistration().then((r) => r?.update()).catch(() => {});
+  const now = await serverStamp();
+  if (now && loadedStamp && now !== loadedStamp) offerUpdate();
+  else if (now && !loadedStamp) loadedStamp = now;
+});
 
 const updateOnline = () => ($("#offline").hidden = navigator.onLine);
 addEventListener("online", updateOnline);
@@ -1155,6 +1271,11 @@ if ("serviceWorker" in navigator) {
     .then(() => navigator.serviceWorker.ready)
     .then(() => { if (firstInstall) toast("Ready to use offline"); })
     .catch(() => {}); // e.g. private browsing: the app still works online
+
+  // A new service worker took over while this page was open (it ships with new app files)
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!firstInstall) offerUpdate(); });
+  // The service worker served a saved copy and has since fetched a newer one
+  navigator.serviceWorker.addEventListener("message", (e) => { if (e.data?.type === "update-available") offerUpdate(); });
 }
 
 // Keep the map sized correctly if the layout changes (e.g. it was hidden at load, or the phone rotates)
