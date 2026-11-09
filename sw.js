@@ -9,7 +9,7 @@
 //
 // Bump VERSION whenever the list of app files changes.
 
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL = `shell-${VERSION}`;
 const TILES = "tiles";
 const PHOTOS = "photos";
@@ -24,6 +24,7 @@ const SHELL_FILES = [
   "data/areas.js",
   "data/walkins.js",
   "data/osm.js",
+  "data/access.js",
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/icon-192.png",

@@ -382,7 +382,8 @@ export const AREAS = [
     description:
       "Woodland gritstone boulders on the Chevin above the A660, with around 200 problems from easy slabs to some of Yorkshire's hardest test-pieces.",
     parking: [
-      { name: "Chevin Forest Park – Upper Shawfield car park", lat: 53.89333, lng: -1.67025, notes: "Free Chevin Forest Park car park; walk east along the Dales Way Link. There's also limited roadside parking on the A660 below the crag (not on the map).", fee: "Free" },
+      { name: "Spaces below the Roadside boulders (A660)", lat: 53.897078, lng: -1.654522, notes: "The obvious spaces right below Caley Roadside; go through the gate. For Caley Crag, a track leads up from the Otley end. Busy road: park with care and don't do three-point turns.", fee: "Fee not recorded" },
+      { name: "Chevin Forest Park – Upper Shawfield car park", lat: 53.89333, lng: -1.67025, notes: "Free Chevin Forest Park car park: the approach from above, avoiding the A660 traffic. Walk east along the Dales Way Link.", fee: "Free" },
     ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems); stars from UKClimbing ticklists; f7B+ and harder from climbing-history.org
     problems: [
@@ -654,7 +655,7 @@ export const AREAS = [
     description:
       "Long sandstone edge with excellent bouldering on rippled, featured rock. Avoid when damp – the sandstone is fragile.",
     parking: [
-      { name: "Roadside, B6349", lat: 55.5844, lng: -1.8836, notes: "Small roadside pull-in; follow the path west to the edge. Don't block field gates.", fee: "Free" },
+      { name: "Roadside parking", lat: 55.591492, lng: -1.895255, notes: "Don't block gates or the road: very wide farm vehicles come through, so park accordingly.", fee: "Fee not recorded" },
     ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems)
     problems: [
@@ -838,6 +839,7 @@ export const AREAS = [
     description:
       "Small gritstone edges and boulders along the wooded rim of Shipley Glen near Baildon. Mostly lower and middle grades, which makes it a good place for easy circuits.",
     parking: [
+      { name: "Main parking (top of the glen)", lat: 53.850677, lng: -1.805393, notes: "Main parking for the boulders along the top of the glen.", fee: "Fee not recorded" },
       { name: "Glen Road parking", lat: 53.84811, lng: -1.80307, notes: "Roadside parking along Glen Road at the south end of the glen; walk north along the edge.", fee: "Fee not recorded" },
     ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems)
@@ -932,8 +934,7 @@ export const AREAS = [
     description:
       "Fell Sandstone walls and blocks hidden in a forest in north Northumberland, with a strong spread of mid-grade and hard problems. The sandstone is fragile: keep off it when it's damp.",
     parking: [
-    ],
-    parkingNote: "No car park is mapped near Kyloe in the Wood. Check the BMC Regional Access Database for current parking and access arrangements before you go.",
+      { name: "Parking by the northern forest gate", lat: 55.642471, lng: -1.94564, notes: "Limited space, so park carefully and keep clear of gates. Walk in on the agreed approach along the forest road from the northern gate (full directions on the BMC page).", fee: "Fee not recorded" },    ],
     // A selection, not a full guide. Source: thetopo.com (most-ascended problems)
     problems: [
       { name: "Monty Python's Direct", grade: "f6C+" },

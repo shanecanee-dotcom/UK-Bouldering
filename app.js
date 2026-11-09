@@ -2,6 +2,7 @@ import { AREAS } from "./data/areas.js";
 import { loadWeather, nowIndex, assess, outlook, bestDay } from "./conditions.js";
 import { WALKINS } from "./data/walkins.js";
 import { OSM } from "./data/osm.js";
+import { ACCESS } from "./data/access.js";
 
 // Merge boulders and problems mapped in OpenStreetMap (data/osm.js, built by tools/build_osm.py).
 // Boulders within 20 m of one we already list are the same boulder under another name: keep ours.
@@ -220,6 +221,52 @@ const ROCKS = {
     tips: ["Slippery when wet, especially close to the river."],
   },
 };
+// ---------- Access (BMC Regional Access Database, data/access.js) ----------
+const ACCESS_LIGHT = {
+  green: { label: "No known access issues", short: null },
+  amber: { label: "Access is sensitive: read the notes before you go", short: "Access: check" },
+  red: { label: "Climbing is not allowed here", short: "No access" },
+};
+function accessChip(area, cls = "") {
+  const a = ACCESS[area.id];
+  if (!a) return "";
+  if (a.restricted) return `<span class="access-chip red ${cls}" title="A restriction is in place: see the Parking tab">⚠ Restricted</span>`;
+  const short = ACCESS_LIGHT[a.light]?.short;
+  return short ? `<span class="access-chip ${a.light} ${cls}" title="${esc(ACCESS_LIGHT[a.light].label)}">⚠ ${short}</span>` : "";
+}
+function accessCard(area) {
+  const a = ACCESS[area.id];
+  if (!a) {
+    return area.region === "Scotland"
+      ? `<div class="access-card"><p><strong>Access in Scotland</strong></p>
+           <p class="muted">The BMC access database covers England and Wales. In Scotland, responsible access is set out in the
+           <a href="https://www.outdooraccess-scotland.scot/" target="_blank" rel="noopener">Scottish Outdoor Access Code</a>.</p></div>`
+      : "";
+  }
+  const light = a.restricted ? "red" : a.light;
+  const note = a.parkingNote || "";
+  return `
+    <div class="access-card access-${light}">
+      <div class="access-status"><i></i><strong>${esc(a.restricted ? "A restriction is in place right now" : ACCESS_LIGHT[a.light]?.label || "Check access")}</strong></div>
+      ${a.restricted ? `<p>Restrictions are often for nesting birds or temporary closures. Check the BMC page for what's affected and until when before you go.</p>` : ""}
+      <dl class="access-facts">
+        ${a.gridRef ? `<div><dt>Grid ref</dt><dd>${esc(a.gridRef)}</dd></div>` : ""}
+        ${a.crow ? `<div><dt>Open access land</dt><dd>${esc(a.crow)}</dd></div>` : ""}
+        ${a.owner && a.owner !== "Unknown" ? `<div><dt>Land</dt><dd>${esc(a.owner)}</dd></div>` : ""}
+        ${a.developed ? `<div><dt>First climbed</dt><dd>${esc(a.developed)}</dd></div>` : ""}
+      </dl>
+      ${note
+        ? note.length > 260
+          ? `<details class="access-note"><summary>BMC parking &amp; approach notes</summary><p>${esc(note)}</p></details>`
+          : `<p class="access-note"><strong>BMC notes:</strong> ${esc(note)}</p>`
+        : ""}
+      <div class="actions">
+        <a class="btn" href="${esc(a.url)}" target="_blank" rel="noopener">BMC access page</a>
+        ${a.updated ? `<span class="muted">Updated ${esc(a.updated)}</span>` : ""}
+      </div>
+    </div>`;
+}
+
 const rockChip = (rock, cls = "") =>
   `<span class="rock-chip ${cls}" title="Rock: ${esc(rock)}"><i style="background:${ROCKS[rock]?.swatch || "#999"}"></i>${esc(rock)}</span>`;
 
@@ -288,7 +335,7 @@ function renderList() {
               <h3>${esc(a.name)}</h3>
               ${c ? `<span class="pill cond-${c.level}" title="${esc(c.label)}"><i></i>${esc(shortLabel(c))}</span>` : ""}
             </div>
-            <p class="meta">${esc(a.region)} ${rockChip(a.rock)}</p>
+            <p class="meta">${esc(a.region)} ${rockChip(a.rock)} ${accessChip(a)}</p>
             <p class="card-stats">
               <span>${esc(a.grades.replace(/\s/g, ""))}</span>
               ${a.problems?.length ? `<span>${a.problems.length} problems</span>` : ""}
@@ -1002,7 +1049,7 @@ async function showDetail(id) {
       <div class="hero-text">
         <span class="hero-pill" id="hero-cond"></span>
         <h2>${esc(area.name)}</h2>
-        <p>${esc(area.region)} ${rockChip(area.rock, "on-photo")}</p>
+        <p>${esc(area.region)} ${rockChip(area.rock, "on-photo")} ${accessChip(area, "on-photo")}</p>
       </div>
     </header>
 
@@ -1039,6 +1086,9 @@ async function showDetail(id) {
     </section>
 
     <section class="panel" data-panel="parking" role="tabpanel">
+      <h3>Access</h3>
+      ${accessCard(area)}
+      <h3>Parking</h3>
       ${area.parking.length
         ? `<ul class="parking-list">${area.parking.map((p, i) => parkingCard(area, p, i)).join("")}</ul>`
         : area.parkingNote ? "" : `<p class="lead muted">No car park is mapped for this crag yet.</p>`}
@@ -1235,7 +1285,7 @@ function offerUpdate() {
 
 // Fingerprint of the app's files on the server (ETag / Last-Modified), without downloading them.
 // HEAD requests skip the service worker, so this always asks GitHub.
-const WATCHED = ["index.html", "app.js", "conditions.js", "styles.css", "data/areas.js", "data/osm.js", "data/walkins.js"];
+const WATCHED = ["index.html", "app.js", "conditions.js", "styles.css", "data/areas.js", "data/osm.js", "data/walkins.js", "data/access.js"];
 async function serverStamp() {
   try {
     const rs = await Promise.all(WATCHED.map((f) => fetch(f, { method: "HEAD", cache: "no-cache" })));

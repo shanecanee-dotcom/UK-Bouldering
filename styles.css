@@ -240,6 +240,56 @@ button { font: inherit; color: inherit; }
 .rock-card ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
 .rock-card li + li { margin-top: 3px; }
 
+/* Access (BMC RAD) */
+.access-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.access-chip.amber { color: var(--damp); }
+.access-chip.red { color: var(--wet); }
+.access-chip.on-photo { background: rgba(10, 14, 12, 0.6); backdrop-filter: blur(6px); }
+.access-chip.on-photo.amber { color: #f0b955; }
+.access-chip.on-photo.red { color: #f08a7e; }
+
+.access-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.access-card p { margin: 8px 0 0; }
+.access-status { display: flex; align-items: center; gap: 8px; }
+.access-status i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none; }
+.access-green .access-status { color: var(--dry); }
+.access-amber .access-status { color: var(--damp); }
+.access-red { border-color: var(--wet); }
+.access-red .access-status { color: var(--wet); }
+.access-status strong { color: inherit; }
+.access-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px 12px;
+  margin: 10px 0 0;
+}
+.access-facts div { min-width: 0; }
+.access-facts dt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.access-facts dd { margin: 0; font-size: 13px; font-weight: 600; }
+.access-note { font-size: 13px; color: var(--muted); }
+details.access-note { margin-top: 10px; }
+details.access-note summary { cursor: pointer; color: var(--text); font-weight: 600; }
+details.access-note p { margin-top: 6px; }
+.access-card .actions { align-items: center; }
+
 /* Condition pill (cards + hero) */
 .pill {
   display: inline-flex;
