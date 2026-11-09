@@ -7,6 +7,7 @@ A lightweight web app listing outdoor bouldering areas in the UK, with photos an
 - **Parking**: each area lists one or more parking spots with fees, notes, a "Directions" link and a map marker.
 - **Conditions**: a "likely dry / may be damp / wet" estimate for each crag, the rain over the last 48 hours, a friction hint and a 7-day outlook with the best day, from [Open-Meteo](https://open-meteo.com) (no API key needed). Sandstone crags use a stricter rule. The logic is in [`conditions.js`](conditions.js).
 - **Walk-ins**: the walking route from each car park to the crag drawn on the map, with distance, ascent, an estimated time and the nearest postcode for sat-navs. The routes are precomputed into [`data/walkins.js`](data/walkins.js).
+- **Works offline**: installable to a phone's home screen. A service worker ([`sw.js`](sw.js)) caches the app, crag data, problems and walk-ins, and keeps the map tiles and photos you've viewed. The last weather forecast is kept for up to six days and marked as saved. Map tiles are only cached as you view them, never bulk-downloaded, per the [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/). Bump `VERSION` in `sw.js` when you add new app files.
 - **Photos**: pulled live from [Wikimedia Commons](https://commons.wikimedia.org) (freely licensed, geotagged near each crag) with credits. You can pin your own photos per area with the `photos` field.
 
 No build step: plain HTML, CSS and JavaScript, with [Leaflet](https://leafletjs.com) loaded from a CDN.

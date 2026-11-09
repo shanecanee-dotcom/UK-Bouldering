@@ -563,6 +563,14 @@ function focusBoulder(name) {
 
 // ---------- Conditions panel ----------
 const dayName = (d) => new Date(`${d.date}T12:00`).toLocaleDateString("en-GB", { weekday: "short" });
+function ago(t) {
+  const mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.round(mins / 60);
+  if (h < 36) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.round(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
 
 function renderConditions(area) {
   const box = document.getElementById("conditions");
@@ -588,6 +596,7 @@ function renderConditions(area) {
       <strong><i></i>${esc(now.label)}</strong>
       <span>${now.friction}</span>
     </div>
+    ${weather.stale ? `<p class="cond-warn">Offline: this is the forecast saved ${esc(ago(weather.fetchedAt))}.</p>` : ""}
     <p class="cond-stats">
       Rain last 48h: <strong>${now.rain48.toFixed(1)} mm</strong> ·
       ${Math.round(now.temp)}°C · ${now.hum}% humidity · wind ${Math.round(now.wind)} km/h
@@ -725,7 +734,9 @@ async function showDetail(id) {
       ${area.parkingNote ? `<p class="cond-warn">${esc(area.parkingNote)}</p>` : ""}
       ${WALKINS[area.id]?.some((w) => w.path)
         ? `<p class="fine-print">Walk-ins follow mapped paths from OpenStreetMap. Times use Naismith's rule
-           (5 km/h plus 10 min per 100 m of ascent). Ascent comes from coarse elevation data, so treat it as approximate.</p>`
+           (5 km/h plus 10 min per 100 m of ascent). Ascent comes from coarse elevation data, so treat it as approximate.</p>
+           <p class="fine-print">No signal at the crag? Open this page and tap "Show walk-in" before you set off: the map
+           tiles you view are saved for offline use.</p>`
         : ""}
       <p class="disclaimer">
         Access arrangements change. Check the
@@ -866,6 +877,34 @@ addEventListener("hashchange", () => {
   if (AREAS.some((a) => a.id === id)) showDetail(id);
   else if (!id && activeId) showList();
 });
+
+// ---------- Offline support ----------
+function toast(text) {
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.setAttribute("role", "status");
+  t.textContent = text;
+  document.body.append(t);
+  requestAnimationFrame(() => t.classList.add("show"));
+  setTimeout(() => {
+    t.classList.remove("show");
+    setTimeout(() => t.remove(), 400);
+  }, 4000);
+}
+
+const updateOnline = () => ($("#offline").hidden = navigator.onLine);
+addEventListener("online", updateOnline);
+addEventListener("offline", updateOnline);
+updateOnline();
+
+if ("serviceWorker" in navigator) {
+  const firstInstall = !navigator.serviceWorker.controller;
+  navigator.serviceWorker
+    .register("sw.js")
+    .then(() => navigator.serviceWorker.ready)
+    .then(() => { if (firstInstall) toast("Ready to use offline"); })
+    .catch(() => {}); // e.g. private browsing: the app still works online
+}
 
 // Keep the map sized correctly if the layout changes (e.g. it was hidden at load, or the phone rotates)
 new ResizeObserver(() => {

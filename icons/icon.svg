@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Full-bleed background so the same art works as a maskable icon; the boulder stays inside the central safe zone -->
+  <rect width="512" height="512" fill="#2f6b4f"/>
+  <circle cx="356" cy="168" r="34" fill="#f3c969"/>
+  <path fill="#f3f1eb" d="M120 352c0-62 30-118 78-146 19-11 36-9 50 3l22 20c9 8 22 10 33 4 28-14 55 16 55 53v66H120z"/>
+  <path fill="none" stroke="#f3f1eb" stroke-width="14" stroke-linecap="round" d="M104 368h304"/>
+</svg>

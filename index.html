@@ -2,9 +2,16 @@
 <html lang="en-GB">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>UK Boulders</title>
   <meta name="description" content="Outdoor bouldering areas across the UK, with photos and nearby parking." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#2f6b4f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Boulders" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -16,6 +23,9 @@
     </a>
     <p class="tagline">Crags, conditions, problems &amp; parking</p>
   </header>
+  <div id="offline" class="offline-banner" role="status" hidden>
+    You're offline. Showing saved crags, problems, walk-ins and the last forecast; map areas you've viewed before still work.
+  </div>
 
   <main class="layout">
     <aside class="sidebar">

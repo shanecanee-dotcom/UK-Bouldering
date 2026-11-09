@@ -10,14 +10,32 @@ const CACHE_MS = 30 * 60 * 1000;
 const HOURLY = ["temperature_2m", "relative_humidity_2m", "precipitation", "wind_speed_10m"];
 const DAILY = ["precipitation_sum", "precipitation_probability_max", "temperature_2m_max", "wind_speed_10m_max", "sunrise", "sunset"];
 
-// One request for every crag (Open-Meteo accepts comma-separated coordinates)
-export async function loadWeather(areas) {
-  try {
-    const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
-    const sameCrags = cached?.ids?.join() === areas.map((a) => a.id).join();
-    if (cached && sameCrags && Date.now() - cached.at < CACHE_MS) return toMap(areas, cached.data);
-  } catch {}
+// The forecast runs 7 days ahead, so an old copy is still useful offline for a while
+const STALE_OK_MS = 6 * 24 * 60 * 60 * 1000;
 
+// One request for every crag (Open-Meteo accepts comma-separated coordinates).
+// Returns a Map(areaId → forecast) with .fetchedAt and .stale (true when offline and using an older copy).
+export async function loadWeather(areas) {
+  let cached = null;
+  try {
+    cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+    const sameCrags = cached?.ids?.join() === areas.map((a) => a.id).join();
+    if (!sameCrags) cached = null;
+    if (cached && Date.now() - cached.at < CACHE_MS) return toMap(areas, cached.data, cached.at, false);
+  } catch {
+    cached = null;
+  }
+
+  try {
+    return await fetchWeather(areas);
+  } catch (err) {
+    // Offline or the API is down: fall back to the last forecast we saved
+    if (cached && Date.now() - cached.at < STALE_OK_MS) return toMap(areas, cached.data, cached.at, true);
+    throw err;
+  }
+}
+
+async function fetchWeather(areas) {
   const params = new URLSearchParams({
     latitude: areas.map((a) => a.lat).join(","),
     longitude: areas.map((a) => a.lng).join(","),
@@ -32,13 +50,19 @@ export async function loadWeather(areas) {
   let data = await res.json();
   if (!Array.isArray(data)) data = [data];
 
+  const at = Date.now();
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), ids: areas.map((a) => a.id), data }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ at, ids: areas.map((a) => a.id), data }));
   } catch {}
-  return toMap(areas, data);
+  return toMap(areas, data, at, false);
 }
 
-const toMap = (areas, data) => new Map(areas.map((a, i) => [a.id, data[i]]));
+function toMap(areas, data, at, stale) {
+  const m = new Map(areas.map((a, i) => [a.id, data[i]]));
+  m.fetchedAt = at;
+  m.stale = stale;
+  return m;
+}
 
 // Index of the current hour in the hourly arrays (times are local, "YYYY-MM-DDTHH:00")
 export function nowIndex(w) {
